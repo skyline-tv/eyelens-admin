@@ -7,8 +7,39 @@ const plain = axios.create({ baseURL, withCredentials: true });
 
 export const api = axios.create({ baseURL, withCredentials: true });
 
-api.interceptors.request.use((config) => {
-  const token = getAccessToken();
+function tokenNeedsRefresh(token) {
+  if (!token) return false;
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return false;
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padLength = (4 - (base64.length % 4)) % 4;
+    const payload = JSON.parse(atob(base64 + "=".repeat(padLength)));
+    const exp = Number(payload?.exp || 0);
+    if (!exp) return false;
+    const now = Math.floor(Date.now() / 1000);
+    return exp - now <= 15;
+  } catch {
+    return false;
+  }
+}
+
+api.interceptors.request.use(async (config) => {
+  let token = getAccessToken();
+  if (tokenNeedsRefresh(token)) {
+    try {
+      const { data } = await plain.post("/auth/refresh");
+      const payload = data?.data;
+      const refreshed = payload?.accessToken;
+      if (refreshed) {
+        applyRefreshedSession(payload);
+        token = refreshed;
+      }
+    } catch {
+      clearAuth();
+      token = null;
+    }
+  }
   if (token) {
     config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;

@@ -23,6 +23,7 @@ function mapRow(p) {
     averageRating: Number(p.averageRating) || 0,
     reviewCount: p.reviewCount ?? 0,
     images: Array.isArray(p.images) ? p.images : [],
+    colors: Array.isArray(p.colors) ? p.colors : [],
   };
 }
 
@@ -36,6 +37,45 @@ async function uploadProductImage(file, onProgress) {
     },
   });
   return data?.data?.url;
+}
+
+function parseLines(text) {
+  return String(text || "")
+    .split(/\r?\n/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function parseColorLines(text) {
+  return parseLines(text)
+    .map((line) => {
+      const [namePart, hexPart = ""] = line.includes("|")
+        ? line.split("|")
+        : line.includes(",")
+          ? line.split(",")
+          : [line, ""];
+      const name = String(namePart || "").trim();
+      if (!name) return null;
+      return {
+        name,
+        hex: String(hexPart || "").trim(),
+        images: [],
+      };
+    })
+    .filter(Boolean);
+}
+
+function formatColorLines(colors) {
+  if (!Array.isArray(colors) || colors.length === 0) return "";
+  return colors
+    .map((c) => {
+      const name = String(c?.name || "").trim();
+      if (!name) return "";
+      const hex = String(c?.hex || "").trim();
+      return hex ? `${name} | ${hex}` : name;
+    })
+    .filter(Boolean)
+    .join("\n");
 }
 
 function compare(a, b, dir) {
@@ -64,17 +104,18 @@ export default function AdminProducts() {
     mrp: "",
     category: "Premium",
     stock: "",
-    imageUrl: "",
+    imageUrlsText: "",
+    colorsText: "",
   });
-  const [addImageFile, setAddImageFile] = useState(null);
-  const [addImagePreview, setAddImagePreview] = useState(null);
+  const [addImageFiles, setAddImageFiles] = useState([]);
+  const [addImagePreviews, setAddImagePreviews] = useState([]);
   const [addUploadPct, setAddUploadPct] = useState(null);
   const addFileRef = useRef(null);
 
   const [editForm, setEditForm] = useState({});
-  const [editImageFile, setEditImageFile] = useState(null);
-  const [editImagePreview, setEditImagePreview] = useState(null);
-  const [editImagePasteUrl, setEditImagePasteUrl] = useState("");
+  const [editImageFiles, setEditImageFiles] = useState([]);
+  const [editImagePreviews, setEditImagePreviews] = useState([]);
+  const [editImagePasteUrls, setEditImagePasteUrls] = useState("");
   const [editUploadPct, setEditUploadPct] = useState(null);
   const editFileRef = useRef(null);
   const editModalRef = useRef(null);
@@ -100,11 +141,11 @@ export default function AdminProducts() {
   }, [refresh]);
 
   const closeEditModal = useCallback(() => {
-    setEditImagePreview((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
+    setEditImagePreviews((prev) => {
+      prev.forEach((url) => URL.revokeObjectURL(url));
+      return [];
     });
-    setEditImageFile(null);
+    setEditImageFiles([]);
     setEditingProduct(null);
   }, []);
 
@@ -153,16 +194,18 @@ export default function AdminProducts() {
       return;
     }
     const origPrice = mrpNum != null && Number.isFinite(mrpNum) && mrpNum > priceNum ? mrpNum : undefined;
-    let images = [];
+    let images = parseLines(addForm.imageUrlsText);
+    const colors = parseColorLines(addForm.colorsText);
     try {
-      if (addImageFile) {
+      if (addImageFiles.length) {
         setAddUploadPct(0);
-        const url = await uploadProductImage(addImageFile, setAddUploadPct);
-        if (url) images.push(url);
+        for (const file of addImageFiles) {
+          const url = await uploadProductImage(file, setAddUploadPct);
+          if (url) images.push(url);
+        }
         setAddUploadPct(null);
-      } else if (addForm.imageUrl.trim()) {
-        images.push(addForm.imageUrl.trim());
       }
+      images = [...new Set(images)];
       await api.post("/products", {
         name: addForm.name.trim(),
         brand: addForm.brand.trim(),
@@ -175,12 +218,22 @@ export default function AdminProducts() {
         material: "",
         gender: "unisex",
         images,
+        colors,
         emoji: "👓",
       });
-      if (addImagePreview) URL.revokeObjectURL(addImagePreview);
-      setAddForm({ brand: "", name: "", price: "", mrp: "", category: "Premium", stock: "", imageUrl: "" });
-      setAddImageFile(null);
-      setAddImagePreview(null);
+      addImagePreviews.forEach((url) => URL.revokeObjectURL(url));
+      setAddForm({
+        brand: "",
+        name: "",
+        price: "",
+        mrp: "",
+        category: "Premium",
+        stock: "",
+        imageUrlsText: "",
+        colorsText: "",
+      });
+      setAddImageFiles([]);
+      setAddImagePreviews([]);
       setShowAddForm(false);
       await refresh();
       push({ type: "success", title: "Product added", message: "Catalog updated successfully." });
@@ -196,10 +249,10 @@ export default function AdminProducts() {
   };
 
   const openEdit = (p) => {
-    if (editImagePreview) URL.revokeObjectURL(editImagePreview);
-    setEditImageFile(null);
-    setEditImagePreview(null);
-    setEditImagePasteUrl("");
+    editImagePreviews.forEach((url) => URL.revokeObjectURL(url));
+    setEditImageFiles([]);
+    setEditImagePreviews([]);
+    setEditImagePasteUrls("");
     setEditUploadPct(null);
     setEditingProduct(p);
     setEditForm({
@@ -207,6 +260,7 @@ export default function AdminProducts() {
       price: typeof p.price === "string" ? p.price.replace("₹", "").replace(/,/g, "") : String(p.priceNum ?? ""),
       mrp: p.origPrice != null ? String(p.origPrice) : "",
       images: Array.isArray(p.images) ? [...p.images] : [],
+      colorsText: formatColorLines(p.colors),
     });
   };
 
@@ -228,16 +282,18 @@ export default function AdminProducts() {
     }
     const origPrice =
       mrpNum != null && Number.isFinite(mrpNum) && mrpNum > priceNum ? mrpNum : null;
-    let images = [...(editForm.images || [])];
+    let images = [...(editForm.images || []), ...parseLines(editImagePasteUrls)];
+    const colors = parseColorLines(editForm.colorsText);
     try {
-      if (editImageFile) {
+      if (editImageFiles.length) {
         setEditUploadPct(0);
-        const url = await uploadProductImage(editImageFile, setEditUploadPct);
-        if (url) images = [url, ...images.slice(1)];
+        for (const file of editImageFiles) {
+          const url = await uploadProductImage(file, setEditUploadPct);
+          if (url) images.push(url);
+        }
         setEditUploadPct(null);
-      } else if (editImagePasteUrl.trim()) {
-        images = [editImagePasteUrl.trim(), ...images.slice(1)];
       }
+      images = [...new Set(images)];
       await api.put(`/products/${editingProduct._id}`, {
         name: editForm.name.trim(),
         brand: editForm.brand.trim(),
@@ -246,11 +302,13 @@ export default function AdminProducts() {
         category: editForm.category,
         stock: Number(editForm.stock) || 0,
         images,
+        colors,
       });
-      if (editImagePreview) URL.revokeObjectURL(editImagePreview);
+      editImagePreviews.forEach((url) => URL.revokeObjectURL(url));
       setEditingProduct(null);
-      setEditImageFile(null);
-      setEditImagePreview(null);
+      setEditImageFiles([]);
+      setEditImagePreviews([]);
+      setEditImagePasteUrls("");
       await refresh();
       push({ type: "success", title: "Saved", message: "Product updated." });
     } catch (err) {
@@ -378,18 +436,19 @@ export default function AdminProducts() {
                 />
               </div>
               <div>
-                <label className="field-label">Product image</label>
+                <label className="field-label">Product photos (multiple)</label>
                 <input
                   ref={addFileRef}
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
+                  multiple
                   style={{ display: "none" }}
                   onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (!f) return;
-                    if (addImagePreview) URL.revokeObjectURL(addImagePreview);
-                    setAddImageFile(f);
-                    setAddImagePreview(URL.createObjectURL(f));
+                    const files = Array.from(e.target.files || []);
+                    if (!files.length) return;
+                    addImagePreviews.forEach((url) => URL.revokeObjectURL(url));
+                    setAddImageFiles(files);
+                    setAddImagePreviews(files.map((f) => URL.createObjectURL(f)));
                   }}
                 />
                 <button
@@ -398,33 +457,42 @@ export default function AdminProducts() {
                   style={{ marginBottom: 8 }}
                   onClick={() => addFileRef.current?.click()}
                 >
-                  Choose image (JPG, PNG, WebP)
+                  Choose images (JPG, PNG, WebP)
                 </button>
-                {addImagePreview ? (
-                  <div style={{ marginTop: 8 }}>
-                    <img
-                      src={addImagePreview}
-                      alt={
-                        addForm.name || addForm.brand
-                          ? `${addForm.name || "Product"} by ${addForm.brand || "Eyelens"}`
-                          : "Preview for new product listing"
-                      }
-                      style={{ maxWidth: 140, borderRadius: 8, border: "1px solid var(--g200)" }}
-                    />
+                {addImagePreviews.length ? (
+                  <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {addImagePreviews.map((src, idx) => (
+                      <img
+                        key={idx}
+                        src={src}
+                        alt="Preview for new product listing"
+                        style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8, border: "1px solid var(--g200)" }}
+                      />
+                    ))}
                   </div>
                 ) : null}
                 {addUploadPct != null ? (
                   <div style={{ fontSize: 12, color: "var(--g600)", marginTop: 6 }}>Uploading… {addUploadPct}%</div>
                 ) : null}
                 <label className="field-label" style={{ marginTop: 12, display: "block" }}>
-                  Or paste image URL
+                  Or paste image URLs (one per line)
                 </label>
-                <input
+                <textarea
                   className="input"
-                  placeholder="https://…"
-                  value={addForm.imageUrl}
-                  disabled={Boolean(addImageFile)}
-                  onChange={(e) => setAddForm((f) => ({ ...f, imageUrl: e.target.value }))}
+                  rows={3}
+                  placeholder={"https://...\nhttps://..."}
+                  value={addForm.imageUrlsText}
+                  onChange={(e) => setAddForm((f) => ({ ...f, imageUrlsText: e.target.value }))}
+                />
+                <label className="field-label" style={{ marginTop: 12, display: "block" }}>
+                  Colors (one per line: Name | Hex)
+                </label>
+                <textarea
+                  className="input"
+                  rows={3}
+                  placeholder={"Midnight Black | #231F20\nCrystal Clear | #D4E8F0"}
+                  value={addForm.colorsText}
+                  onChange={(e) => setAddForm((f) => ({ ...f, colorsText: e.target.value }))}
                 />
               </div>
               <button type="submit" className="btn btn-primary">
@@ -653,44 +721,74 @@ export default function AdminProducts() {
                 />
               </div>
               <div>
-                <label className="field-label">Product image</label>
+                <label className="field-label">Product photos</label>
                 <input
                   ref={editFileRef}
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
+                  multiple
                   style={{ display: "none" }}
                   onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (!f) return;
-                    if (editImagePreview) URL.revokeObjectURL(editImagePreview);
-                    setEditImageFile(f);
-                    setEditImagePreview(URL.createObjectURL(f));
+                    const files = Array.from(e.target.files || []);
+                    if (!files.length) return;
+                    editImagePreviews.forEach((url) => URL.revokeObjectURL(url));
+                    setEditImageFiles(files);
+                    setEditImagePreviews(files.map((f) => URL.createObjectURL(f)));
                   }}
                 />
                 <button type="button" className="btn btn-ghost btn-sm" style={{ marginBottom: 8 }} onClick={() => editFileRef.current?.click()}>
-                  Upload new image
+                  Upload more images
                 </button>
-                {(editImagePreview || editForm.images?.[0]) ? (
-                  <div style={{ marginTop: 8 }}>
-                    <img
-                      src={editImagePreview || editForm.images[0]}
-                      alt={`${editForm.name || "Product"} by ${editForm.brand || "Eyelens"}`}
-                      style={{ maxWidth: 140, borderRadius: 8, border: "1px solid var(--g200)" }}
-                    />
+                {(editImagePreviews.length || editForm.images?.length) ? (
+                  <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {(editImagePreviews.length ? editImagePreviews : editForm.images || []).map((src, idx) => (
+                      <div key={idx} style={{ position: "relative" }}>
+                        <img
+                          src={src}
+                          alt={`${editForm.name || "Product"} by ${editForm.brand || "Eyelens"}`}
+                          style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8, border: "1px solid var(--g200)" }}
+                        />
+                        {!editImagePreviews.length ? (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            style={{ position: "absolute", top: -8, right: -8, minWidth: 22, height: 22, padding: 0 }}
+                            onClick={() =>
+                              setEditForm((f) => ({
+                                ...f,
+                                images: (f.images || []).filter((_, i) => i !== idx),
+                              }))
+                            }
+                          >
+                            ×
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
                   </div>
                 ) : null}
                 {editUploadPct != null ? (
                   <div style={{ fontSize: 12, color: "var(--g600)", marginTop: 6 }}>Uploading… {editUploadPct}%</div>
                 ) : null}
                 <label className="field-label" style={{ marginTop: 12, display: "block" }}>
-                  Or paste image URL
+                  Paste more image URLs (one per line)
                 </label>
-                <input
+                <textarea
                   className="input"
-                  placeholder="https://…"
-                  value={editImagePasteUrl}
-                  disabled={Boolean(editImageFile)}
-                  onChange={(e) => setEditImagePasteUrl(e.target.value)}
+                  rows={3}
+                  placeholder={"https://...\nhttps://..."}
+                  value={editImagePasteUrls}
+                  onChange={(e) => setEditImagePasteUrls(e.target.value)}
+                />
+                <label className="field-label" style={{ marginTop: 12, display: "block" }}>
+                  Colors (one per line: Name | Hex)
+                </label>
+                <textarea
+                  className="input"
+                  rows={3}
+                  placeholder={"Midnight Black | #231F20\nCrystal Clear | #D4E8F0"}
+                  value={editForm.colorsText || ""}
+                  onChange={(e) => setEditForm((f) => ({ ...f, colorsText: e.target.value }))}
                 />
               </div>
               <button type="submit" className="btn btn-primary">
