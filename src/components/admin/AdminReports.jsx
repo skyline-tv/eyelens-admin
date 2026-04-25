@@ -8,23 +8,6 @@ const reportTabs = [
   { id: "financial", label: "Financial summary" },
 ];
 
-const salesReportRows = [
-  { date: "2025-01-12", invoice: "INV-2025-001", customer: "Arjun Mehta", amount: 4956, gst: 657 },
-  { date: "2025-01-12", invoice: "INV-2025-002", customer: "Priya Nair", amount: 2241, gst: 342 },
-  { date: "2025-01-11", invoice: "INV-2024-089", customer: "Kabir Sethi", amount: 5499, gst: 839 },
-  { date: "2025-01-10", invoice: "INV-2024-088", customer: "Deepa Krishna", amount: 2299, gst: 351 },
-];
-const purchaseReportRows = [
-  { date: "2025-01-10", bill: "PUR-2025-001", supplier: "Optical Supplies Ltd", amount: 53100, gst: 8100 },
-  { date: "2025-01-08", bill: "PUR-2024-042", supplier: "Frame Co", amount: 24800, gst: 4464 },
-];
-const stockReportRows = [
-  { sku: "EL-MRT-001", name: "Milano Round Titanium", category: "Premium", qty: 124, value: 532200 },
-  { sku: "EL-HSS-002", name: "Hex Screen Shield", category: "Computer", qty: 88, value: 167112 },
-  { sku: "EL-CCR-003", name: "Cartier-Cut Rectangle", category: "Gold", qty: 47, value: 258453 },
-  { sku: "EL-CAP-004", name: "Classic Aviator Pro", category: "Sunglasses", qty: 342, value: 785580 },
-];
-
 function downloadCSV(headers, rows, filename) {
   const escape = (v) => (v == null ? "" : String(v).replace(/"/g, '""'));
   const line = (arr) => arr.map((c) => `"${escape(c)}"`).join(",");
@@ -40,6 +23,9 @@ function downloadCSV(headers, rows, filename) {
 export default function AdminReports() {
   const [tab, setTab] = useState("sales");
   const [period, setPeriod] = useState("month");
+  const [salesReportRows] = useState([]);
+  const [purchaseReportRows] = useState([]);
+  const [stockReportRows] = useState([]);
   const bootSkel = useBriefSkeleton();
 
   const salesTotal = salesReportRows.reduce((s, r) => s + r.amount + r.gst, 0);
@@ -136,15 +122,23 @@ export default function AdminReports() {
                   </tr>
                 </thead>
                 <tbody>
-                  {salesReportRows.map((r, i) => (
-                    <tr key={i}>
-                      <td>{r.date}</td>
-                      <td><strong style={{ color: "var(--em)" }}>{r.invoice}</strong></td>
-                      <td>{r.customer}</td>
-                      <td style={{ textAlign: "right" }}>₹{r.amount.toLocaleString("en-IN")}</td>
-                      <td style={{ textAlign: "right" }}>₹{r.gst.toLocaleString("en-IN")}</td>
+                  {salesReportRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: "center", color: "#6B7280" }}>
+                        No sales report data yet
+                      </td>
                     </tr>
-                  ))}
+                  ) : (
+                    salesReportRows.map((r, i) => (
+                      <tr key={i}>
+                        <td>{r.date}</td>
+                        <td><strong style={{ color: "var(--em)" }}>{r.invoice}</strong></td>
+                        <td>{r.customer}</td>
+                        <td style={{ textAlign: "right" }}>₹{r.amount.toLocaleString("en-IN")}</td>
+                        <td style={{ textAlign: "right" }}>₹{r.gst.toLocaleString("en-IN")}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -169,15 +163,23 @@ export default function AdminReports() {
                   </tr>
                 </thead>
                 <tbody>
-                  {purchaseReportRows.map((r, i) => (
-                    <tr key={i}>
-                      <td>{r.date}</td>
-                      <td><strong style={{ color: "var(--em)" }}>{r.bill}</strong></td>
-                      <td>{r.supplier}</td>
-                      <td style={{ textAlign: "right" }}>₹{r.amount.toLocaleString("en-IN")}</td>
-                      <td style={{ textAlign: "right" }}>₹{r.gst.toLocaleString("en-IN")}</td>
+                  {purchaseReportRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: "center", color: "#6B7280" }}>
+                        No purchase report data yet
+                      </td>
                     </tr>
-                  ))}
+                  ) : (
+                    purchaseReportRows.map((r, i) => (
+                      <tr key={i}>
+                        <td>{r.date}</td>
+                        <td><strong style={{ color: "var(--em)" }}>{r.bill}</strong></td>
+                        <td>{r.supplier}</td>
+                        <td style={{ textAlign: "right" }}>₹{r.amount.toLocaleString("en-IN")}</td>
+                        <td style={{ textAlign: "right" }}>₹{r.gst.toLocaleString("en-IN")}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -202,15 +204,23 @@ export default function AdminReports() {
                   </tr>
                 </thead>
                 <tbody>
-                  {stockReportRows.map((r) => (
-                    <tr key={r.sku}>
-                      <td style={{ color: "#6B7280" }}>{r.sku}</td>
-                      <td><strong>{r.name}</strong></td>
-                      <td><span className="badge badge-em">{r.category}</span></td>
-                      <td style={{ textAlign: "right" }}>{r.qty}</td>
-                      <td style={{ textAlign: "right" }}>₹{r.value.toLocaleString("en-IN")}</td>
+                  {stockReportRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: "center", color: "#6B7280" }}>
+                        No stock report data yet
+                      </td>
                     </tr>
-                  ))}
+                  ) : (
+                    stockReportRows.map((r) => (
+                      <tr key={r.sku}>
+                        <td style={{ color: "#6B7280" }}>{r.sku}</td>
+                        <td><strong>{r.name}</strong></td>
+                        <td><span className="badge badge-em">{r.category}</span></td>
+                        <td style={{ textAlign: "right" }}>{r.qty}</td>
+                        <td style={{ textAlign: "right" }}>₹{r.value.toLocaleString("en-IN")}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

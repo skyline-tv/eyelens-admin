@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../api/axiosInstance";
 import { useToast } from "../../context/ToastContext";
 import ConfirmModal from "../ConfirmModal.jsx";
@@ -14,10 +14,6 @@ const PLACEMENT_OPTIONS = [
 
 function placementLabel(value) {
   return PLACEMENT_OPTIONS.find((o) => o.value === (value || ""))?.label || "Hero carousel";
-}
-
-function isHomeCategoryPlacement(placement) {
-  return typeof placement === "string" && placement.startsWith("home_cat_");
 }
 
 /** Upload one banner image to API (admin endpoint); progress 0-100 */
@@ -53,11 +49,6 @@ export default function AdminBanners() {
   const bannerFileRef = useRef(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const activeHeroCarouselCount = useMemo(
-    () => list.filter((b) => b.isActive !== false && !isHomeCategoryPlacement(b.placement)).length,
-    [list]
-  );
-
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
@@ -92,22 +83,6 @@ export default function AdminBanners() {
       if (bannerImagePreview) URL.revokeObjectURL(bannerImagePreview);
     };
   }, [bannerImagePreview]);
-
-  const installSampleHero = async () => {
-    try {
-      const { data } = await api.post("/banners/admin/seed-hero");
-      const created = Number(data?.data?.created) || 0;
-      const message = data?.data?.message || "";
-      if (created > 0) {
-        push({ type: "success", title: "Hero ready", message: message || `${created} sample slide(s) added.` });
-      } else {
-        push({ type: "info", title: "No change", message: message || "Carousel already has active hero slide(s)." });
-      }
-      await refresh();
-    } catch {
-      push({ type: "error", title: "Error", message: "Could not install sample hero. Check API and admin login." });
-    }
-  };
 
   const openNew = () => {
     setEditing(null);
@@ -192,43 +167,11 @@ export default function AdminBanners() {
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {activeHeroCarouselCount === 0 && !loading ? (
-            <button type="button" className="btn btn-primary btn-sm" onClick={installSampleHero}>
-              Install sample hero (2 slides)
-            </button>
-          ) : null}
           <button type="button" className="btn btn-primary btn-sm" onClick={openNew}>
             + Add banner
           </button>
         </div>
       </div>
-
-      {!loading && activeHeroCarouselCount === 0 ? (
-        <div
-          className="adm-card"
-          style={{
-            marginBottom: 20,
-            border: "1px solid rgba(245, 158, 11, 0.5)",
-            background: "rgba(245, 158, 11, 0.08)",
-          }}
-          role="status"
-        >
-          <div className="adm-card-pad" style={{ fontSize: 14, color: "var(--g600)", lineHeight: 1.55 }}>
-            <strong style={{ color: "#b45309" }}>No active hero carousel on the store.</strong>
-            <br />
-            The shop home needs at least one row with placement <strong>Hero carousel</strong> and <strong>Active</strong> on.
-            Category-only rows do not fill the hero. Use <strong>Install sample hero</strong> for two ready-made slides, or add your own.
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
-              <button type="button" className="btn btn-primary btn-sm" onClick={installSampleHero}>
-                Install sample hero (2 slides)
-              </button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={openNew}>
-                Add hero slide manually
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {!loading && showForm && (
         <div className="adm-card" style={{ marginBottom: 20 }}>
@@ -363,7 +306,7 @@ export default function AdminBanners() {
                 ) : list.length === 0 ? (
                   <tr>
                     <td colSpan={7} style={{ padding: 28, textAlign: "center", color: "var(--g500)" }}>
-                      No banner rows yet. Install sample hero or add a banner.
+                      No banner rows yet. Add a banner to start.
                     </td>
                   </tr>
                 ) : (

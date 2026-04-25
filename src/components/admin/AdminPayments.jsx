@@ -1,13 +1,12 @@
 import { useState } from "react";
-import { defaultPayments, defaultBankReconciliation, defaultInvoices } from "../../data/accountingData";
 import { useBriefSkeleton } from "../../hooks/useBriefSkeleton";
 
 const paymentModes = ["Cash", "UPI", "Card", "Bank transfer", "Cheque"];
 
 export default function AdminPayments() {
-  const [payments, setPayments] = useState(defaultPayments);
-  const [invoices] = useState(defaultInvoices);
-  const [recon, setRecon] = useState(defaultBankReconciliation);
+  const [payments, setPayments] = useState([]);
+  const [invoices] = useState([]);
+  const [recon, setRecon] = useState([]);
   const [tab, setTab] = useState("payments");
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [showReceiptForm, setShowReceiptForm] = useState(false);

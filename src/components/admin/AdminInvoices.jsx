@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { defaultInvoices } from "../../data/accountingData";
 import { useBriefSkeleton } from "../../hooks/useBriefSkeleton";
 
 const gstRates = [0, 5, 12, 18, 28];
@@ -57,7 +56,7 @@ function downloadInvoice(inv) {
 }
 
 export default function AdminInvoices() {
-  const [invoices, setInvoices] = useState(defaultInvoices);
+  const [invoices, setInvoices] = useState([]);
   const [filter, setFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [formType, setFormType] = useState("sales");

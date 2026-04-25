@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { defaultLedgers, defaultJournalEntries } from "../../data/accountingData";
 
 const accountingTabs = [
   { id: "ledgers", label: "Ledgers" },
@@ -11,8 +10,8 @@ const accountingTabs = [
 
 export default function AdminAccounting() {
   const [tab, setTab] = useState("ledgers");
-  const [ledgers, setLedgers] = useState(defaultLedgers);
-  const [journalEntries, setJournalEntries] = useState(defaultJournalEntries);
+  const [ledgers, setLedgers] = useState([]);
+  const [journalEntries, setJournalEntries] = useState([]);
   const [showLedgerForm, setShowLedgerForm] = useState(false);
   const [showJournalForm, setShowJournalForm] = useState(false);
   const [ledgerForm, setLedgerForm] = useState({ name: "", group: "Cash in hand", openingBalance: "0", type: "debit" });
@@ -67,35 +66,17 @@ export default function AdminAccounting() {
   const tbTotalDebit = trialBalance.reduce((s, r) => s + (r.debit || 0), 0);
   const tbTotalCredit = trialBalance.reduce((s, r) => s + (r.credit || 0), 0);
 
-  // Mock P&L
-  const revenue = 2847600;
-  const expenses = 1240000;
+  const revenue = 0;
+  const expenses = 0;
   const netProfit = revenue - expenses;
 
-  // Mock balance sheet
-  const assets = 1285000;
-  const liabilities = 222000;
-  const equity = 500000;
+  const assets = tbTotalDebit;
+  const liabilities = tbTotalCredit;
+  const equity = 0;
   const retained = netProfit;
 
   return (
     <div className="adm-page-section">
-      <div
-        className="adm-card"
-        style={{
-          marginBottom: 20,
-          padding: "12px 16px",
-          borderRadius: 12,
-          border: "1px solid var(--g200)",
-          background: "var(--g50)",
-          fontSize: 13,
-          color: "var(--g700)",
-          lineHeight: 1.5,
-        }}
-      >
-        <strong style={{ color: "var(--black)" }}>Demo workspace.</strong>{" "}
-        Ledgers and reports here use local sample data only — they are not linked to live orders, payments, or GST filings.
-      </div>
       <div className="inner-tabs" style={{ marginBottom: 20 }}>
         {accountingTabs.map((t) => (
           <button key={t.id} type="button" className={`inner-tab${tab === t.id ? " active" : ""}`} onClick={() => setTab(t.id)}>
@@ -161,14 +142,22 @@ export default function AdminAccounting() {
                     </tr>
                   </thead>
                   <tbody>
-                    {ledgers.map((l) => (
-                      <tr key={l.id}>
-                        <td><strong>{l.name}</strong></td>
-                        <td style={{ color: "#6B7280" }}>{l.group}</td>
-                        <td>₹{Number(l.openingBalance).toLocaleString("en-IN")}</td>
-                        <td><span className="badge badge-em">{l.type}</span></td>
+                    {ledgers.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} style={{ textAlign: "center", color: "#6B7280" }}>
+                          No ledgers yet
+                        </td>
                       </tr>
-                    ))}
+                    ) : (
+                      ledgers.map((l) => (
+                        <tr key={l.id}>
+                          <td><strong>{l.name}</strong></td>
+                          <td style={{ color: "#6B7280" }}>{l.group}</td>
+                          <td>₹{Number(l.openingBalance).toLocaleString("en-IN")}</td>
+                          <td><span className="badge badge-em">{l.type}</span></td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -263,15 +252,23 @@ export default function AdminAccounting() {
                     </tr>
                   </thead>
                   <tbody>
-                    {journalEntries.map((j) => (
-                      <tr key={j.id}>
-                        <td><strong style={{ color: "var(--em)" }}>{j.id}</strong></td>
-                        <td>{j.date}</td>
-                        <td>{j.narration}</td>
-                        <td>₹{Number(j.totalDebit).toLocaleString("en-IN")}</td>
-                        <td>₹{Number(j.totalCredit).toLocaleString("en-IN")}</td>
+                    {journalEntries.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} style={{ textAlign: "center", color: "#6B7280" }}>
+                          No journal entries yet
+                        </td>
                       </tr>
-                    ))}
+                    ) : (
+                      journalEntries.map((j) => (
+                        <tr key={j.id}>
+                          <td><strong style={{ color: "var(--em)" }}>{j.id}</strong></td>
+                          <td>{j.date}</td>
+                          <td>{j.narration}</td>
+                          <td>₹{Number(j.totalDebit).toLocaleString("en-IN")}</td>
+                          <td>₹{Number(j.totalCredit).toLocaleString("en-IN")}</td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>

@@ -1,12 +1,11 @@
 import { useState } from "react";
-import { hsnSacCodes } from "../../data/accountingData";
 
 export default function AdminGstTaxes() {
   const [calcAmount, setCalcAmount] = useState("");
   const [calcRate, setCalcRate] = useState(18);
   const [hsnFilter, setHsnFilter] = useState("");
   const [newHsn, setNewHsn] = useState({ code: "", desc: "", gstRate: 18 });
-  const [codes, setCodes] = useState(hsnSacCodes);
+  const [codes, setCodes] = useState([]);
   const [showHsnForm, setShowHsnForm] = useState(false);
 
   const taxable = parseFloat(calcAmount) || 0;
@@ -25,11 +24,7 @@ export default function AdminGstTaxes() {
     setShowHsnForm(false);
   };
 
-  // Mock GST report data
-  const gstReport = [
-    { period: "Jan 2025", outwardTaxable: 2847600, outwardTax: 341712, inwardTaxable: 450000, inwardTax: 81000, netPayable: 260712 },
-    { period: "Dec 2024", outwardTaxable: 2298400, outwardTax: 275808, inwardTaxable: 380000, inwardTax: 68400, netPayable: 207408 },
-  ];
+  const gstReport = [];
 
   return (
     <div className="adm-page-section">
@@ -146,16 +141,24 @@ export default function AdminGstTaxes() {
                 </tr>
               </thead>
               <tbody>
-                {gstReport.map((r) => (
-                  <tr key={r.period}>
-                    <td><strong>{r.period}</strong></td>
-                    <td style={{ textAlign: "right" }}>₹{r.outwardTaxable.toLocaleString("en-IN")}</td>
-                    <td style={{ textAlign: "right" }}>₹{r.outwardTax.toLocaleString("en-IN")}</td>
-                    <td style={{ textAlign: "right" }}>₹{r.inwardTaxable.toLocaleString("en-IN")}</td>
-                    <td style={{ textAlign: "right" }}>₹{r.inwardTax.toLocaleString("en-IN")}</td>
-                    <td style={{ textAlign: "right", fontWeight: 700 }}>₹{r.netPayable.toLocaleString("en-IN")}</td>
+                {gstReport.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: "center", color: "#6B7280" }}>
+                      No GST report data yet
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  gstReport.map((r) => (
+                    <tr key={r.period}>
+                      <td><strong>{r.period}</strong></td>
+                      <td style={{ textAlign: "right" }}>₹{r.outwardTaxable.toLocaleString("en-IN")}</td>
+                      <td style={{ textAlign: "right" }}>₹{r.outwardTax.toLocaleString("en-IN")}</td>
+                      <td style={{ textAlign: "right" }}>₹{r.inwardTaxable.toLocaleString("en-IN")}</td>
+                      <td style={{ textAlign: "right" }}>₹{r.inwardTax.toLocaleString("en-IN")}</td>
+                      <td style={{ textAlign: "right", fontWeight: 700 }}>₹{r.netPayable.toLocaleString("en-IN")}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

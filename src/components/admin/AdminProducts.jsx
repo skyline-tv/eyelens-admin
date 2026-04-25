@@ -47,6 +47,12 @@ function parseLines(text) {
 }
 
 function parseColorLines(text) {
+  const normalizeColorName = (raw) =>
+    String(raw || "")
+      .trim()
+      .replace(/^(color|colour)\s*[—\-:]\s*/i, "")
+      .trim();
+
   return parseLines(text)
     .map((line) => {
       const [namePart, hexPart = ""] = line.includes("|")
@@ -54,7 +60,7 @@ function parseColorLines(text) {
         : line.includes(",")
           ? line.split(",")
           : [line, ""];
-      const name = String(namePart || "").trim();
+      const name = normalizeColorName(namePart);
       if (!name) return null;
       return {
         name,
