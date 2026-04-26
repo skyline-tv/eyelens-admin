@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { jsPDF } from "jspdf";
 import { api } from "../../api/axiosInstance";
 import { useToast } from "../../context/ToastContext";
 import AdminModal from "../AdminModal.jsx";
@@ -55,24 +56,6 @@ function downloadCSV(headers, rows, filename) {
   URL.revokeObjectURL(a.href);
 }
 
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function downloadTextFile(content, filename, mime = "text/plain;charset=utf-8;") {
-  const blob = new Blob([content], { type: mime });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
 function compare(a, b, dir) {
   if (a == null && b == null) return 0;
   if (a == null) return 1;
@@ -108,10 +91,27 @@ function formatPrescriptionText(prescription) {
   return parts.join(" | ");
 }
 
-function buildLensReceiptText(receipt) {
-  return [
-    "EYELENS - LENS RECEIPT",
-    "",
+function sanitizeFilenameSegment(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, "")
+    .replace(/\s+/g, " ")
+    .slice(0, 80);
+}
+
+function downloadLensReceiptPdf(receipt) {
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const left = 48;
+  let y = 64;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.text("EYELENS - LENS RECEIPT", left, y);
+  y += 28;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  const lines = [
     `Receipt No: ${receipt.id || "—"}`,
     `Order No: ${receipt.orderId || "—"}`,
     `Invoice No: ${receipt.invoiceNo || "—"}`,
@@ -122,9 +122,16 @@ function buildLensReceiptText(receipt) {
     `Amount: INR ${Number(receipt.amount || 0).toLocaleString("en-IN")}`,
     `Date: ${receipt.date || "—"}`,
     receipt.notes ? `Notes: ${receipt.notes}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ].filter(Boolean);
+
+  for (const line of lines) {
+    const wrapped = doc.splitTextToSize(line, 500);
+    doc.text(wrapped, left, y);
+    y += wrapped.length * 16;
+  }
+
+  const safeClient = sanitizeFilenameSegment(receipt.clientName) || "Client";
+  doc.save(`${safeClient} - lens receipt.pdf`);
 }
 
 export default function AdminOrders({
@@ -276,7 +283,7 @@ export default function AdminOrders({
     const prescription = firstRxItem?.prescription || null;
     const existing = lensReceipts.find((r) => String(r.orderId) === orderRef);
     if (existing) {
-      downloadTextFile(buildLensReceiptText(existing), `lens-receipt-${String(order._id).slice(-8)}.txt`);
+      downloadLensReceiptPdf(existing);
       push({ type: "success", title: "Lens receipt downloaded", message: `Downloaded for ${order.id}.` });
       return;
     }
@@ -294,7 +301,7 @@ export default function AdminOrders({
       notes: "Created from Orders action.",
     };
     setLensReceipts((prev) => [created, ...prev]);
-    downloadTextFile(buildLensReceiptText(created), `lens-receipt-${String(order._id).slice(-8)}.txt`);
+    downloadLensReceiptPdf(created);
     push({ type: "success", title: "Lens receipt created", message: `Created and downloaded for ${order.id}.` });
   };
 
