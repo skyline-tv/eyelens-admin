@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { injectStyles } from "./styles/eyelensStyles";
 import AdminPage from "./pages/AdminPage";
@@ -10,6 +10,8 @@ import ToastHost from "./components/ToastHost";
 
 export default function App() {
   const navigate = useNavigate();
+  const [courierReceipts, setCourierReceipts] = useState([]);
+  const [lensReceipts, setLensReceipts] = useState([]);
 
   useEffect(() => {
     injectStyles();
@@ -30,10 +32,10 @@ export default function App() {
                   await logout();
                   navigate("/login", { replace: true });
                 }}
-                courierReceipts={[]}
-                lensReceipts={[]}
-                setCourierReceipts={() => {}}
-                setLensReceipts={() => {}}
+                courierReceipts={courierReceipts}
+                lensReceipts={lensReceipts}
+                setCourierReceipts={setCourierReceipts}
+                setLensReceipts={setLensReceipts}
               />
             }
           />

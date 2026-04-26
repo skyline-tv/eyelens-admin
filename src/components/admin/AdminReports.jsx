@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useBriefSkeleton } from "../../hooks/useBriefSkeleton";
 
 const reportTabs = [
@@ -20,13 +20,48 @@ function downloadCSV(headers, rows, filename) {
   URL.revokeObjectURL(a.href);
 }
 
-export default function AdminReports() {
+export default function AdminReports({ orders = [], products = [] }) {
   const [tab, setTab] = useState("sales");
   const [period, setPeriod] = useState("month");
-  const [salesReportRows] = useState([]);
-  const [purchaseReportRows] = useState([]);
-  const [stockReportRows] = useState([]);
   const bootSkel = useBriefSkeleton();
+  const now = Date.now();
+  const periodStart = useMemo(() => {
+    if (period === "today") return now - 24 * 60 * 60 * 1000;
+    if (period === "week") return now - 7 * 24 * 60 * 60 * 1000;
+    if (period === "quarter") return now - 90 * 24 * 60 * 60 * 1000;
+    return now - 30 * 24 * 60 * 60 * 1000;
+  }, [now, period]);
+  const scopedOrders = useMemo(
+    () => orders.filter((o) => !o?.createdAt || new Date(o.createdAt).getTime() >= periodStart),
+    [orders, periodStart]
+  );
+  const salesReportRows = useMemo(
+    () =>
+      scopedOrders.map((o) => ({
+        date: o.createdAt ? new Date(o.createdAt).toLocaleDateString("en-IN") : "—",
+        invoice: `INV-${String(o._id || "").slice(-6).toUpperCase() || "NA"}`,
+        customer: o.user?.name || o.user?.email || "Walk-in",
+        amount: Number(o.taxableAmount ?? o.subtotal ?? o.totalAmount ?? 0),
+        gst: Number(o.taxAmount ?? 0),
+      })),
+    [scopedOrders]
+  );
+  const purchaseReportRows = [];
+  const stockReportRows = useMemo(
+    () =>
+      products.map((p) => {
+        const qty = Number(p?.stockQuantity ?? p?.stock ?? p?.quantity ?? 0);
+        const rate = Number(p?.price ?? 0);
+        return {
+          sku: p?.sku || String(p?._id || "").slice(-8).toUpperCase(),
+          name: p?.name || "Product",
+          category: p?.category || "General",
+          qty,
+          value: qty * rate,
+        };
+      }),
+    [products]
+  );
 
   const salesTotal = salesReportRows.reduce((s, r) => s + r.amount + r.gst, 0);
   const purchaseTotal = purchaseReportRows.reduce((s, r) => s + r.amount + r.gst, 0);

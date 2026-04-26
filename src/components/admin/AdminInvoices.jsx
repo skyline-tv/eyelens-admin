@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useBriefSkeleton } from "../../hooks/useBriefSkeleton";
 
 const gstRates = [0, 5, 12, 18, 28];
@@ -55,13 +55,38 @@ function downloadInvoice(inv) {
   URL.revokeObjectURL(a.href);
 }
 
-export default function AdminInvoices() {
+export default function AdminInvoices({ orders = [] }) {
   const [invoices, setInvoices] = useState([]);
   const [filter, setFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [formType, setFormType] = useState("sales");
   const [form, setForm] = useState({ party: "", date: new Date().toISOString().slice(0, 10), items: [{ desc: "", qty: 1, rate: "", amount: "" }], gstRate: 18 });
-  const filtered = invoices.filter((inv) => filter === "all" || inv.type === filter);
+  const orderInvoices = useMemo(
+    () =>
+      orders.map((o) => {
+        const amount = Number(o.taxableAmount ?? o.subtotal ?? o.totalAmount ?? 0);
+        const gst = Number(o.taxAmount ?? 0);
+        return {
+          id: `INV-${String(o._id || "").slice(-6).toUpperCase()}`,
+          type: "sales",
+          party: o.user?.name || o.user?.email || "Customer",
+          date: o.createdAt ? new Date(o.createdAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+          amount,
+          gst,
+          total: Number(o.totalAmount ?? amount + gst),
+          status: String(o.paymentStatus || "").toLowerCase() === "paid" ? "paid" : "pending",
+          items: (o.items || []).map((it) => ({
+            desc: it.name || "Item",
+            qty: Number(it.qty || 1),
+            rate: Number(it.price || 0),
+            amount: Number((it.qty || 1) * (it.price || 0)),
+          })),
+        };
+      }),
+    [orders]
+  );
+  const allInvoices = useMemo(() => [...invoices, ...orderInvoices], [invoices, orderInvoices]);
+  const filtered = allInvoices.filter((inv) => filter === "all" || inv.type === filter);
 
   const addItemLine = () => setForm((f) => ({ ...f, items: [...f.items, { desc: "", qty: 1, rate: "", amount: "" }] }));
   const removeItemLine = (idx) => setForm((f) => ({ ...f, items: f.items.filter((_, i) => i !== idx) }));
@@ -85,7 +110,7 @@ export default function AdminInvoices() {
     const gst = Math.round(amount * (gstRate / 100));
     const total = amount + gst;
     const prefix = formType === "sales" ? "INV" : "PUR";
-    const nextNum = invoices.filter((i) => i.type === formType).length + 1;
+    const nextNum = allInvoices.filter((i) => i.type === formType).length + 1;
     const newInv = {
       id: `${prefix}-2025-${String(nextNum).padStart(3, "0")}`,
       type: formType,

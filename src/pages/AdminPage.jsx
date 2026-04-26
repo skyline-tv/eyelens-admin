@@ -46,6 +46,7 @@ export default function AdminPage({ onLogout, courierReceipts = [], lensReceipts
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [liveStats, setLiveStats] = useState(null);
   const [dashOrders, setDashOrders] = useState([]);
+  const [dashProducts, setDashProducts] = useState([]);
   const [dashUpdatedAt, setDashUpdatedAt] = useState(null);
   const [dashAgeSec, setDashAgeSec] = useState(0);
   /** When true, Inventory opens with low-stock filter applied (from dashboard alert). */
@@ -60,13 +61,15 @@ export default function AdminPage({ onLogout, courierReceipts = [], lensReceipts
 
   const fetchDashboard = useCallback(async () => {
     try {
-      const [st, ord] = await Promise.all([api.get("/stats/dashboard"), api.get("/orders")]);
+      const [st, ord, prod] = await Promise.all([api.get("/stats/dashboard"), api.get("/orders"), api.get("/products")]);
       setLiveStats(mergeDashboard(st.data?.data));
       setDashOrders(Array.isArray(ord.data?.data) ? ord.data.data : []);
+      setDashProducts(Array.isArray(prod.data?.data) ? prod.data.data : []);
       setDashUpdatedAt(Date.now());
     } catch {
       setLiveStats(mergeDashboard(null));
       setDashOrders([]);
+      setDashProducts([]);
     }
   }, []);
 
@@ -458,11 +461,11 @@ export default function AdminPage({ onLogout, courierReceipts = [], lensReceipts
           {admTab === "returns" && <AdminReturns />}
           {admTab === "analytics" && <AdminAnalytics />}
           {admTab === "settings" && <AdminSettings />}
-          {admTab === "accounting" && <AdminAccounting />}
-          {admTab === "invoices" && <AdminInvoices />}
-          {admTab === "gst" && <AdminGstTaxes />}
-          {admTab === "reports" && <AdminReports />}
-          {admTab === "payments" && <AdminPayments />}
+          {admTab === "accounting" && <AdminAccounting orders={dashOrders} />}
+          {admTab === "invoices" && <AdminInvoices orders={dashOrders} />}
+          {admTab === "gst" && <AdminGstTaxes orders={dashOrders} products={dashProducts} />}
+          {admTab === "reports" && <AdminReports orders={dashOrders} products={dashProducts} />}
+          {admTab === "payments" && <AdminPayments orders={dashOrders} />}
           {admTab === "receipts" && (
             <AdminReceipts
               courierReceipts={courierReceipts}

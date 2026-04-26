@@ -8,7 +8,7 @@ const accountingTabs = [
   { id: "balance", label: "Balance sheet" },
 ];
 
-export default function AdminAccounting() {
+export default function AdminAccounting({ orders = [] }) {
   const [tab, setTab] = useState("ledgers");
   const [ledgers, setLedgers] = useState([]);
   const [journalEntries, setJournalEntries] = useState([]);
@@ -66,7 +66,7 @@ export default function AdminAccounting() {
   const tbTotalDebit = trialBalance.reduce((s, r) => s + (r.debit || 0), 0);
   const tbTotalCredit = trialBalance.reduce((s, r) => s + (r.credit || 0), 0);
 
-  const revenue = 0;
+  const revenue = orders.reduce((sum, o) => sum + Number(o?.totalAmount || 0), 0);
   const expenses = 0;
   const netProfit = revenue - expenses;
 

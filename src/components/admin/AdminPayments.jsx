@@ -1,12 +1,40 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useBriefSkeleton } from "../../hooks/useBriefSkeleton";
 
 const paymentModes = ["Cash", "UPI", "Card", "Bank transfer", "Cheque"];
 
-export default function AdminPayments() {
+export default function AdminPayments({ orders = [] }) {
   const [payments, setPayments] = useState([]);
-  const [invoices] = useState([]);
   const [recon, setRecon] = useState([]);
+  const invoices = useMemo(
+    () =>
+      orders.map((o) => ({
+        id: `INV-${String(o._id || "").slice(-6).toUpperCase()}`,
+        type: "sales",
+        party: o.user?.name || o.user?.email || "Customer",
+        date: o.createdAt ? new Date(o.createdAt).toLocaleDateString("en-IN") : "—",
+        total: Number(o.totalAmount || 0),
+        status: String(o.paymentStatus || "").toLowerCase() === "paid" ? "paid" : "pending",
+      })),
+    [orders]
+  );
+  const autoReceipts = useMemo(
+    () =>
+      orders
+        .filter((o) => String(o.paymentStatus || "").toLowerCase() === "paid")
+        .map((o) => ({
+          id: `PAY-${String(o._id || "").slice(-6).toUpperCase()}`,
+          date: o.createdAt ? new Date(o.createdAt).toLocaleDateString("en-IN") : "—",
+          type: "receipt",
+          party: o.user?.name || o.user?.email || "Customer",
+          amount: Number(o.totalAmount || 0),
+          mode: o.paymentMethod === "razorpay" ? "UPI/Card" : "Cash",
+          ref: o.paymentMethod === "razorpay" ? "Online payment" : "COD",
+          invoiceId: `INV-${String(o._id || "").slice(-6).toUpperCase()}`,
+        })),
+    [orders]
+  );
+  const allPayments = [...payments, ...autoReceipts];
   const [tab, setTab] = useState("payments");
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [showReceiptForm, setShowReceiptForm] = useState(false);
@@ -15,8 +43,8 @@ export default function AdminPayments() {
 
   const pendingInvoices = invoices.filter((inv) => inv.status === "pending");
   const totalPending = pendingInvoices.reduce((s, i) => s + i.total, 0);
-  const totalReceipts = payments.filter((p) => p.type === "receipt").reduce((s, p) => s + p.amount, 0);
-  const totalPayments = payments.filter((p) => p.type === "payment").reduce((s, p) => s + p.amount, 0);
+  const totalReceipts = allPayments.filter((p) => p.type === "receipt").reduce((s, p) => s + p.amount, 0);
+  const totalPayments = allPayments.filter((p) => p.type === "payment").reduce((s, p) => s + p.amount, 0);
 
   const submitPayment = (e) => {
     e.preventDefault();
@@ -246,7 +274,7 @@ export default function AdminPayments() {
                     </tr>
                   </thead>
                   <tbody>
-                    {payments.map((p) => (
+                    {allPayments.map((p) => (
                       <tr key={p.id}>
                         <td><strong style={{ color: "var(--em)" }}>{p.id}</strong></td>
                         <td>{p.date}</td>

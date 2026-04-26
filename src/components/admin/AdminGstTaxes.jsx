@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-export default function AdminGstTaxes() {
+export default function AdminGstTaxes({ orders = [], products = [] }) {
   const [calcAmount, setCalcAmount] = useState("");
   const [calcRate, setCalcRate] = useState(18);
   const [hsnFilter, setHsnFilter] = useState("");
@@ -24,7 +24,33 @@ export default function AdminGstTaxes() {
     setShowHsnForm(false);
   };
 
-  const gstReport = [];
+  const gstReport = (() => {
+    const byMonth = new Map();
+    orders.forEach((o) => {
+      const d = o?.createdAt ? new Date(o.createdAt) : null;
+      const key = d && !Number.isNaN(d.getTime())
+        ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+        : "Unknown";
+      const outwardTaxable = Number(o?.taxableAmount ?? o?.subtotal ?? o?.totalAmount ?? 0);
+      const outwardTax = Number(o?.taxAmount ?? Math.round(outwardTaxable * 0.18));
+      if (!byMonth.has(key)) {
+        byMonth.set(key, { period: key, outwardTaxable: 0, outwardTax: 0, inwardTaxable: 0, inwardTax: 0, netPayable: 0 });
+      }
+      const row = byMonth.get(key);
+      row.outwardTaxable += outwardTaxable;
+      row.outwardTax += outwardTax;
+    });
+    const inwardTaxable = products.reduce((sum, p) => sum + Number(p?.price || 0) * Number(p?.stockQuantity ?? p?.stock ?? p?.quantity ?? 0), 0);
+    const inwardTax = Math.round(inwardTaxable * 0.18);
+    return Array.from(byMonth.values())
+      .sort((a, b) => String(b.period).localeCompare(String(a.period)))
+      .map((row) => ({
+        ...row,
+        inwardTaxable,
+        inwardTax,
+        netPayable: Math.max(0, row.outwardTax - inwardTax),
+      }));
+  })();
 
   return (
     <div className="adm-page-section">
