@@ -116,12 +116,7 @@ function downloadLensReceiptPdf(receipt) {
     `Order No: ${receipt.orderId || "—"}`,
     `Invoice No: ${receipt.invoiceNo || "—"}`,
     `Client Name: ${receipt.clientName || "—"}`,
-    `Frame: ${receipt.frameName || "—"}`,
     `Lens Type: ${receipt.lensType || "—"}`,
-    `Prescription: ${receipt.lensPower || "—"}`,
-    `Amount: INR ${Number(receipt.amount || 0).toLocaleString("en-IN")}`,
-    `Date: ${receipt.date || "—"}`,
-    receipt.notes ? `Notes: ${receipt.notes}` : "",
   ].filter(Boolean);
 
   for (const line of lines) {
@@ -130,8 +125,103 @@ function downloadLensReceiptPdf(receipt) {
     y += wrapped.length * 16;
   }
 
+  y += 8;
+  const rx = receipt.prescription && typeof receipt.prescription === "object" ? receipt.prescription : null;
+  const patient = rx?.patientName || receipt.clientName || "—";
+  const fallback = String(receipt.lensPower || "").trim();
+  doc.setFont("helvetica", "bold");
+  doc.text("Prescription:", left, y);
+  y += 16;
+  doc.setFont("helvetica", "normal");
+  doc.text(`Patient: ${patient}`, left, y);
+  y += 16;
+
+  if (rx) {
+    const tableLeft = left;
+    const tableTop = y + 4;
+    const colW = [90, 110, 110, 110];
+    const rowH = 24;
+    const headers = ["", "Sphere", "Cylinder", "Axis"];
+    const rows = [
+      ["OD (R)", rx.odSphere || "—", rx.odCylinder || "—", rx.odAxis || "—"],
+      ["OS (L)", rx.osSphere || "—", rx.osCylinder || "—", rx.osAxis || "—"],
+    ];
+    const totalW = colW.reduce((a, b) => a + b, 0);
+    const totalH = rowH * (1 + rows.length);
+
+    doc.rect(tableLeft, tableTop, totalW, totalH);
+    let x = tableLeft;
+    for (let i = 0; i < colW.length - 1; i += 1) {
+      x += colW[i];
+      doc.line(x, tableTop, x, tableTop + totalH);
+    }
+    doc.line(tableLeft, tableTop + rowH, tableLeft + totalW, tableTop + rowH);
+    doc.line(tableLeft, tableTop + rowH * 2, tableLeft + totalW, tableTop + rowH * 2);
+
+    doc.setFont("helvetica", "bold");
+    let hx = tableLeft;
+    headers.forEach((h, idx) => {
+      doc.text(h, hx + 8, tableTop + 16);
+      hx += colW[idx];
+    });
+
+    doc.setFont("helvetica", "normal");
+    rows.forEach((r, ri) => {
+      let cx = tableLeft;
+      r.forEach((cell, ci) => {
+        if (ci === 0) doc.setFont("helvetica", "bold");
+        else doc.setFont("helvetica", "normal");
+        doc.text(String(cell), cx + 8, tableTop + rowH * (ri + 1) + 16);
+        cx += colW[ci];
+      });
+    });
+    y = tableTop + totalH + 16;
+    doc.setFont("helvetica", "normal");
+    const extra = [];
+    if (rx.add) extra.push(`Add: ${rx.add}`);
+    if (rx.pd) extra.push(`PD: ${rx.pd}`);
+    if (extra.length) {
+      doc.text(extra.join("  |  "), left, y);
+      y += 16;
+    }
+  } else {
+    doc.text(fallback || "—", left, y);
+  }
+
   const safeClient = sanitizeFilenameSegment(receipt.clientName) || "Client";
   doc.save(`${safeClient} - lens receipt.pdf`);
+}
+
+function downloadCourierReceiptPdf(receipt) {
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const left = 48;
+  let y = 64;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.text("EYELENS - COURIER RECEIPT", left, y);
+  y += 28;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  const lines = [
+    `Receipt No: ${receipt.id || "—"}`,
+    `Order No: ${receipt.orderId || "—"}`,
+    `Invoice No: ${receipt.invoiceNo || "—"}`,
+    `Client Name: ${receipt.deliveryName || "—"}`,
+    "Address:",
+  ];
+  for (const line of lines) {
+    doc.text(line, left, y);
+    y += 16;
+  }
+
+  const address = String(receipt.deliveryAddress || "—");
+  const wrappedAddress = doc.splitTextToSize(address, 500);
+  doc.text(wrappedAddress, left, y);
+
+  const safeClient = sanitizeFilenameSegment(receipt.deliveryName) || "Client";
+  doc.save(`${safeClient} - courier receipt.pdf`);
 }
 
 export default function AdminOrders({
@@ -255,25 +345,27 @@ export default function AdminOrders({
   };
 
   const createCourierReceipt = (order) => {
-    setCourierReceipts((prev) => {
-      const orderRef = order.id;
-      if (prev.some((r) => String(r.orderId) === orderRef)) return prev;
-      return [
-        {
-          id: `CR-${String(prev.length + 1).padStart(3, "0")}`,
-          orderId: orderRef,
-          invoiceNo: buildInvoiceNo(order._id),
-          deliveryName: order.customer || "—",
-          deliveryAddress: order.address || "—",
-          paid: order.paymentStatus === "paid",
-          amount: Number(String(order.amount).replace(/[^\d]/g, "")) || 0,
-          date: new Date().toISOString().slice(0, 10),
-          notes: "Created from Orders action.",
-        },
-        ...prev,
-      ];
-    });
-    push({ type: "success", title: "Courier receipt created", message: `Created for ${order.id}.` });
+    const orderRef = order.id;
+    const existing = courierReceipts.find((r) => String(r.orderId) === orderRef);
+    if (existing) {
+      downloadCourierReceiptPdf(existing);
+      push({ type: "success", title: "Courier receipt downloaded", message: `Downloaded for ${order.id}.` });
+      return;
+    }
+    const created = {
+      id: `CR-${String(courierReceipts.length + 1).padStart(3, "0")}`,
+      orderId: orderRef,
+      invoiceNo: buildInvoiceNo(order._id),
+      deliveryName: order.customer || "—",
+      deliveryAddress: order.address || "—",
+      paid: order.paymentStatus === "paid",
+      amount: Number(String(order.amount).replace(/[^\d]/g, "")) || 0,
+      date: new Date().toISOString().slice(0, 10),
+      notes: "Created from Orders action.",
+    };
+    setCourierReceipts((prev) => [created, ...prev]);
+    downloadCourierReceiptPdf(created);
+    push({ type: "success", title: "Courier receipt created", message: `Created and downloaded for ${order.id}.` });
   };
 
   const createLensReceipt = (order) => {
@@ -461,7 +553,6 @@ export default function AdminOrders({
                           className="btn btn-ghost btn-sm"
                           style={{ padding: "6px 12px", fontSize: 12 }}
                           onClick={() => createCourierReceipt(o)}
-                          disabled={courierReceipts.some((r) => String(r.orderId) === o.id)}
                           title="Create courier receipt"
                         >
                           Courier receipt
