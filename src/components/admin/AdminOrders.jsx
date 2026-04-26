@@ -67,7 +67,35 @@ function compare(a, b, dir) {
   return 0;
 }
 
-export default function AdminOrders() {
+function buildInvoiceNo(orderId) {
+  return `INV-${String(orderId || "").slice(-8).toUpperCase() || "NA"}`;
+}
+
+function buildOrderRef(orderId) {
+  return `#${String(orderId || "").slice(-6)}`;
+}
+
+function formatPrescriptionText(prescription) {
+  if (!prescription || typeof prescription !== "object") return "";
+  const parts = [];
+  if (prescription.patientName) parts.push(`Patient: ${prescription.patientName}`);
+  if (prescription.odSphere || prescription.odCylinder || prescription.odAxis) {
+    parts.push(`OD ${[prescription.odSphere, prescription.odCylinder, prescription.odAxis].filter(Boolean).join(" / ")}`);
+  }
+  if (prescription.osSphere || prescription.osCylinder || prescription.osAxis) {
+    parts.push(`OS ${[prescription.osSphere, prescription.osCylinder, prescription.osAxis].filter(Boolean).join(" / ")}`);
+  }
+  if (prescription.add) parts.push(`Add ${prescription.add}`);
+  if (prescription.pd) parts.push(`PD ${prescription.pd}`);
+  return parts.join(" | ");
+}
+
+export default function AdminOrders({
+  courierReceipts = [],
+  lensReceipts = [],
+  setCourierReceipts = () => {},
+  setLensReceipts = () => {},
+}) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("all");
@@ -139,6 +167,38 @@ export default function AdminOrders() {
   const updateStatus = async (orderId, status) => {
     try {
       await api.put(`/orders/${orderId}/status`, { status });
+      const targetOrder = orders.find((o) => String(o._id) === String(orderId));
+      if (status === "delivered" && targetOrder) {
+        const hasLensLine = (targetOrder.items || []).some(
+          (it) => it?.lens?.name || (it?.prescription && it.prescription.mode !== "none")
+        );
+        if (hasLensLine) {
+          setLensReceipts((prev) => {
+            const orderRef = buildOrderRef(targetOrder._id);
+            if (prev.some((r) => String(r.orderId) === orderRef)) return prev;
+            const firstItem = targetOrder.items?.[0] || {};
+            const firstRxItem = (targetOrder.items || []).find((it) => it?.prescription);
+            const prescription = firstRxItem?.prescription || null;
+            return [
+              {
+                id: `LR-${String(prev.length + 1).padStart(3, "0")}`,
+                orderId: orderRef,
+                clientName: targetOrder.customer || "—",
+                invoiceNo: buildInvoiceNo(targetOrder._id),
+                lensType: firstItem?.lens?.name || "Prescription lens",
+                frameName: firstItem?.name || "—",
+                lensPower: formatPrescriptionText(prescription),
+                prescription,
+                amount: Number(String(targetOrder.amount).replace(/[^\d]/g, "")) || 0,
+                date: new Date().toISOString().slice(0, 10),
+                notes: "Auto-created when order marked as received.",
+              },
+              ...prev,
+            ];
+          });
+          push({ type: "success", title: "Lens receipt created", message: "Order received; lens receipt auto-created." });
+        }
+      }
       await refresh();
       setViewOrder((prev) => {
         if (!prev || String(prev._id) !== String(orderId)) return prev;
@@ -148,6 +208,55 @@ export default function AdminOrders() {
     } catch {
       push({ type: "error", title: "Update failed", message: "Could not update order status." });
     }
+  };
+
+  const createCourierReceipt = (order) => {
+    setCourierReceipts((prev) => {
+      const orderRef = order.id;
+      if (prev.some((r) => String(r.orderId) === orderRef)) return prev;
+      return [
+        {
+          id: `CR-${String(prev.length + 1).padStart(3, "0")}`,
+          orderId: orderRef,
+          invoiceNo: buildInvoiceNo(order._id),
+          deliveryName: order.customer || "—",
+          deliveryAddress: order.address || "—",
+          paid: order.paymentStatus === "paid",
+          amount: Number(String(order.amount).replace(/[^\d]/g, "")) || 0,
+          date: new Date().toISOString().slice(0, 10),
+          notes: "Created from Orders action.",
+        },
+        ...prev,
+      ];
+    });
+    push({ type: "success", title: "Courier receipt created", message: `Created for ${order.id}.` });
+  };
+
+  const createLensReceipt = (order) => {
+    const orderRef = order.id;
+    const firstItem = order.items?.[0] || {};
+    const firstRxItem = (order.items || []).find((it) => it?.prescription);
+    const prescription = firstRxItem?.prescription || null;
+    setLensReceipts((prev) => {
+      if (prev.some((r) => String(r.orderId) === orderRef)) return prev;
+      return [
+        {
+          id: `LR-${String(prev.length + 1).padStart(3, "0")}`,
+          orderId: orderRef,
+          clientName: order.customer || "—",
+          invoiceNo: buildInvoiceNo(order._id),
+          lensType: firstItem?.lens?.name || "Prescription lens",
+          frameName: firstItem?.name || "—",
+          lensPower: formatPrescriptionText(prescription),
+          prescription,
+          amount: Number(String(order.amount).replace(/[^\d]/g, "")) || 0,
+          date: new Date().toISOString().slice(0, 10),
+          notes: "Created from Orders action.",
+        },
+        ...prev,
+      ];
+    });
+    push({ type: "success", title: "Lens receipt created", message: `Created for ${order.id}.` });
   };
 
   return (
@@ -300,6 +409,26 @@ export default function AdminOrders() {
                           onClick={() => setViewOrder(o)}
                         >
                           View
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          style={{ padding: "6px 12px", fontSize: 12 }}
+                          onClick={() => createCourierReceipt(o)}
+                          disabled={courierReceipts.some((r) => String(r.orderId) === o.id)}
+                          title="Create courier receipt"
+                        >
+                          Courier receipt
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          style={{ padding: "6px 12px", fontSize: 12 }}
+                          onClick={() => createLensReceipt(o)}
+                          disabled={lensReceipts.some((r) => String(r.orderId) === o.id)}
+                          title="Create lens receipt"
+                        >
+                          Lens receipt
                         </button>
                       </td>
                     </tr>

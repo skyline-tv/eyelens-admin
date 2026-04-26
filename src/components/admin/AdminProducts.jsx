@@ -39,11 +39,48 @@ async function uploadProductImage(file, onProgress) {
   return data?.data?.url;
 }
 
+async function uploadProductImages(files, setProgress) {
+  const uploadedUrls = [];
+  const failedFiles = [];
+  if (!Array.isArray(files) || !files.length) return { uploadedUrls, failedFiles };
+  setProgress(0);
+  for (let i = 0; i < files.length; i += 1) {
+    const file = files[i];
+    try {
+      const url = await uploadProductImage(file, (pct) => {
+        const safePct = Number.isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 0;
+        const overall = Math.round(((i + safePct / 100) / files.length) * 100);
+        setProgress(overall);
+      });
+      if (url) uploadedUrls.push(url);
+      else failedFiles.push(file?.name || `image-${i + 1}`);
+    } catch {
+      failedFiles.push(file?.name || `image-${i + 1}`);
+    }
+  }
+  setProgress(null);
+  return { uploadedUrls, failedFiles };
+}
+
 function parseLines(text) {
   return String(text || "")
     .split(/\r?\n/)
     .map((x) => x.trim())
     .filter(Boolean);
+}
+
+function mergeUniqueFiles(existing, incoming) {
+  const seen = new Set(
+    (existing || []).map((f) => `${f?.name || ""}:${f?.size || 0}:${f?.lastModified || 0}`)
+  );
+  const merged = [...(existing || [])];
+  for (const file of incoming || []) {
+    const key = `${file?.name || ""}:${file?.size || 0}:${file?.lastModified || 0}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(file);
+  }
+  return merged;
 }
 
 function parseColorLines(text) {
@@ -204,12 +241,15 @@ export default function AdminProducts() {
     const colors = parseColorLines(addForm.colorsText);
     try {
       if (addImageFiles.length) {
-        setAddUploadPct(0);
-        for (const file of addImageFiles) {
-          const url = await uploadProductImage(file, setAddUploadPct);
-          if (url) images.push(url);
+        const { uploadedUrls, failedFiles } = await uploadProductImages(addImageFiles, setAddUploadPct);
+        images.push(...uploadedUrls);
+        if (failedFiles.length) {
+          push({
+            type: "error",
+            title: "Some images were skipped",
+            message: `${failedFiles.length} file(s) failed to upload. Product will still be created.`,
+          });
         }
-        setAddUploadPct(null);
       }
       images = [...new Set(images)];
       await api.post("/products", {
@@ -292,12 +332,15 @@ export default function AdminProducts() {
     const colors = parseColorLines(editForm.colorsText);
     try {
       if (editImageFiles.length) {
-        setEditUploadPct(0);
-        for (const file of editImageFiles) {
-          const url = await uploadProductImage(file, setEditUploadPct);
-          if (url) images.push(url);
+        const { uploadedUrls, failedFiles } = await uploadProductImages(editImageFiles, setEditUploadPct);
+        images.push(...uploadedUrls);
+        if (failedFiles.length) {
+          push({
+            type: "error",
+            title: "Some images were skipped",
+            message: `${failedFiles.length} file(s) failed to upload. Other changes were saved.`,
+          });
         }
-        setEditUploadPct(null);
       }
       images = [...new Set(images)];
       await api.put(`/products/${editingProduct._id}`, {
@@ -452,9 +495,9 @@ export default function AdminProducts() {
                   onChange={(e) => {
                     const files = Array.from(e.target.files || []);
                     if (!files.length) return;
-                    addImagePreviews.forEach((url) => URL.revokeObjectURL(url));
-                    setAddImageFiles(files);
-                    setAddImagePreviews(files.map((f) => URL.createObjectURL(f)));
+                    setAddImageFiles((prev) => mergeUniqueFiles(prev, files));
+                    setAddImagePreviews((prev) => [...prev, ...files.map((f) => URL.createObjectURL(f))]);
+                    e.target.value = "";
                   }}
                 />
                 <button
@@ -737,9 +780,9 @@ export default function AdminProducts() {
                   onChange={(e) => {
                     const files = Array.from(e.target.files || []);
                     if (!files.length) return;
-                    editImagePreviews.forEach((url) => URL.revokeObjectURL(url));
-                    setEditImageFiles(files);
-                    setEditImagePreviews(files.map((f) => URL.createObjectURL(f)));
+                    setEditImageFiles((prev) => mergeUniqueFiles(prev, files));
+                    setEditImagePreviews((prev) => [...prev, ...files.map((f) => URL.createObjectURL(f))]);
+                    e.target.value = "";
                   }}
                 />
                 <button type="button" className="btn btn-ghost btn-sm" style={{ marginBottom: 8 }} onClick={() => editFileRef.current?.click()}>

@@ -14,7 +14,6 @@ import AdminInvoices from "../components/admin/AdminInvoices";
 import AdminGstTaxes from "../components/admin/AdminGstTaxes";
 import AdminReports from "../components/admin/AdminReports";
 import AdminPayments from "../components/admin/AdminPayments";
-import AdminReceipts from "../components/admin/AdminReceipts";
 import AdminDashboardCharts from "../components/admin/AdminDashboardCharts";
 import AdminBanners from "../components/admin/AdminBanners";
 
@@ -37,7 +36,6 @@ const accountingNavItems = [
   { id: "gst", icon: "🧾", label: "GST & Taxes" },
   { id: "reports", icon: "📈", label: "Reports" },
   { id: "payments", icon: "💳", label: "Payments" },
-  { id: "receipts", icon: "🧾", label: "Receipts" },
 ];
 
 export default function AdminPage({ onLogout, courierReceipts = [], lensReceipts = [], setCourierReceipts, setLensReceipts }) {
@@ -452,7 +450,14 @@ export default function AdminPage({ onLogout, courierReceipts = [], lensReceipts
               </div>
             </div>
           )}
-          {admTab === "orders" && <AdminOrders />}
+          {admTab === "orders" && (
+            <AdminOrders
+              courierReceipts={courierReceipts}
+              lensReceipts={lensReceipts}
+              setCourierReceipts={setCourierReceipts}
+              setLensReceipts={setLensReceipts}
+            />
+          )}
           {admTab === "products" && <AdminProducts />}
           {admTab === "inventory" && <AdminInventory startInLowFilter={inventoryStartLow} />}
           {admTab === "customers" && <AdminCustomers />}
@@ -466,14 +471,6 @@ export default function AdminPage({ onLogout, courierReceipts = [], lensReceipts
           {admTab === "gst" && <AdminGstTaxes orders={dashOrders} products={dashProducts} />}
           {admTab === "reports" && <AdminReports orders={dashOrders} products={dashProducts} />}
           {admTab === "payments" && <AdminPayments orders={dashOrders} />}
-          {admTab === "receipts" && (
-            <AdminReceipts
-              courierReceipts={courierReceipts}
-              lensReceipts={lensReceipts}
-              setCourierReceipts={setCourierReceipts}
-              setLensReceipts={setLensReceipts}
-            />
-          )}
         </main>
       </div>
     </div>
