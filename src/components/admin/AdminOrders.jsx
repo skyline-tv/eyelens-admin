@@ -55,6 +55,24 @@ function downloadCSV(headers, rows, filename) {
   URL.revokeObjectURL(a.href);
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function downloadTextFile(content, filename, mime = "text/plain;charset=utf-8;") {
+  const blob = new Blob([content], { type: mime });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 function compare(a, b, dir) {
   if (a == null && b == null) return 0;
   if (a == null) return 1;
@@ -88,6 +106,25 @@ function formatPrescriptionText(prescription) {
   if (prescription.add) parts.push(`Add ${prescription.add}`);
   if (prescription.pd) parts.push(`PD ${prescription.pd}`);
   return parts.join(" | ");
+}
+
+function buildLensReceiptText(receipt) {
+  return [
+    "EYELENS - LENS RECEIPT",
+    "",
+    `Receipt No: ${receipt.id || "—"}`,
+    `Order No: ${receipt.orderId || "—"}`,
+    `Invoice No: ${receipt.invoiceNo || "—"}`,
+    `Client Name: ${receipt.clientName || "—"}`,
+    `Frame: ${receipt.frameName || "—"}`,
+    `Lens Type: ${receipt.lensType || "—"}`,
+    `Prescription: ${receipt.lensPower || "—"}`,
+    `Amount: INR ${Number(receipt.amount || 0).toLocaleString("en-IN")}`,
+    `Date: ${receipt.date || "—"}`,
+    receipt.notes ? `Notes: ${receipt.notes}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export default function AdminOrders({
@@ -237,26 +274,28 @@ export default function AdminOrders({
     const firstItem = order.items?.[0] || {};
     const firstRxItem = (order.items || []).find((it) => it?.prescription);
     const prescription = firstRxItem?.prescription || null;
-    setLensReceipts((prev) => {
-      if (prev.some((r) => String(r.orderId) === orderRef)) return prev;
-      return [
-        {
-          id: `LR-${String(prev.length + 1).padStart(3, "0")}`,
-          orderId: orderRef,
-          clientName: order.customer || "—",
-          invoiceNo: buildInvoiceNo(order._id),
-          lensType: firstItem?.lens?.name || "Prescription lens",
-          frameName: firstItem?.name || "—",
-          lensPower: formatPrescriptionText(prescription),
-          prescription,
-          amount: Number(String(order.amount).replace(/[^\d]/g, "")) || 0,
-          date: new Date().toISOString().slice(0, 10),
-          notes: "Created from Orders action.",
-        },
-        ...prev,
-      ];
-    });
-    push({ type: "success", title: "Lens receipt created", message: `Created for ${order.id}.` });
+    const existing = lensReceipts.find((r) => String(r.orderId) === orderRef);
+    if (existing) {
+      downloadTextFile(buildLensReceiptText(existing), `lens-receipt-${String(order._id).slice(-8)}.txt`);
+      push({ type: "success", title: "Lens receipt downloaded", message: `Downloaded for ${order.id}.` });
+      return;
+    }
+    const created = {
+      id: `LR-${String(lensReceipts.length + 1).padStart(3, "0")}`,
+      orderId: orderRef,
+      clientName: order.customer || "—",
+      invoiceNo: buildInvoiceNo(order._id),
+      lensType: firstItem?.lens?.name || "Prescription lens",
+      frameName: firstItem?.name || "—",
+      lensPower: formatPrescriptionText(prescription),
+      prescription,
+      amount: Number(String(order.amount).replace(/[^\d]/g, "")) || 0,
+      date: new Date().toISOString().slice(0, 10),
+      notes: "Created from Orders action.",
+    };
+    setLensReceipts((prev) => [created, ...prev]);
+    downloadTextFile(buildLensReceiptText(created), `lens-receipt-${String(order._id).slice(-8)}.txt`);
+    push({ type: "success", title: "Lens receipt created", message: `Created and downloaded for ${order.id}.` });
   };
 
   return (
@@ -425,7 +464,6 @@ export default function AdminOrders({
                           className="btn btn-ghost btn-sm"
                           style={{ padding: "6px 12px", fontSize: 12 }}
                           onClick={() => createLensReceipt(o)}
-                          disabled={lensReceipts.some((r) => String(r.orderId) === o.id)}
                           title="Create lens receipt"
                         >
                           Lens receipt
