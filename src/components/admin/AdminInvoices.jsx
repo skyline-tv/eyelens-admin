@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useBriefSkeleton } from "../../hooks/useBriefSkeleton";
+import { useToast } from "../../context/ToastContext";
 
 const gstRates = [0, 5, 12, 18, 28];
 
@@ -39,10 +40,12 @@ function getInvoiceHtml(inv) {
 
 function printInvoice(inv) {
   const win = window.open("", "_blank");
+  if (!win) return false;
   win.document.write(getInvoiceHtml(inv));
   win.document.close();
   win.print();
   win.close();
+  return true;
 }
 
 function downloadInvoice(inv) {
@@ -61,6 +64,7 @@ export default function AdminInvoices({ orders = [] }) {
   const [showForm, setShowForm] = useState(false);
   const [formType, setFormType] = useState("sales");
   const [form, setForm] = useState({ party: "", date: new Date().toISOString().slice(0, 10), items: [{ desc: "", qty: 1, rate: "", amount: "" }], gstRate: 18 });
+  const { push } = useToast();
   const orderInvoices = useMemo(
     () =>
       orders.map((o) => {
@@ -125,12 +129,14 @@ export default function AdminInvoices({ orders = [] }) {
     setInvoices((prev) => [newInv, ...prev]);
     setForm({ party: "", date: new Date().toISOString().slice(0, 10), items: [{ desc: "", qty: 1, rate: "", amount: "" }], gstRate: 18 });
     setShowForm(false);
+    push({ type: "success", title: "Invoice created", message: `${newInv.id} was created successfully.` });
   };
 
   const handleExport = () => {
     const headers = ["ID", "Type", "Party", "Date", "Amount", "GST", "Total", "Status"];
     const rows = filtered.map((i) => [i.id, i.type, i.party, i.date, i.amount, i.gst, i.total, i.status]);
     downloadCSV(headers, rows, `invoices-${new Date().toISOString().slice(0, 10)}.csv`);
+    push({ type: "success", title: "Exported", message: "Invoices CSV downloaded." });
   };
 
   const bootSkel = useBriefSkeleton();
@@ -296,8 +302,28 @@ export default function AdminInvoices({ orders = [] }) {
                     <td><strong>₹{Number(inv.total).toLocaleString("en-IN")}</strong></td>
                     <td><span className={`badge ${inv.status === "paid" ? "badge-delivered" : "badge-transit"}`}>{inv.status}</span></td>
                     <td>
-                      <button type="button" className="btn btn-ghost btn-sm" style={{ marginRight: 6 }} onClick={() => printInvoice(inv)}>Print</button>
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => downloadInvoice(inv)}>Download</button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        style={{ marginRight: 6 }}
+                        onClick={() => {
+                          const ok = printInvoice(inv);
+                          if (ok) push({ type: "success", title: "Print opened", message: `${inv.id} sent to print dialog.` });
+                          else push({ type: "error", title: "Pop-up blocked", message: "Please allow pop-ups to print invoices." });
+                        }}
+                      >
+                        Print
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => {
+                          downloadInvoice(inv);
+                          push({ type: "success", title: "Downloaded", message: `${inv.id} invoice downloaded.` });
+                        }}
+                      >
+                        Download
+                      </button>
                     </td>
                   </tr>
                 ))}

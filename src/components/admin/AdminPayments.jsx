@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useBriefSkeleton } from "../../hooks/useBriefSkeleton";
+import { useToast } from "../../context/ToastContext";
 
 const paymentModes = ["Cash", "UPI", "Card", "Bank transfer", "Cheque"];
 
@@ -40,6 +41,7 @@ export default function AdminPayments({ orders = [] }) {
   const [showReceiptForm, setShowReceiptForm] = useState(false);
   const [paymentForm, setPaymentForm] = useState({ date: new Date().toISOString().slice(0, 10), party: "", amount: "", mode: "Bank transfer", ref: "", invoiceId: "" });
   const [receiptForm, setReceiptForm] = useState({ date: new Date().toISOString().slice(0, 10), party: "", amount: "", mode: "UPI", ref: "", invoiceId: "" });
+  const { push } = useToast();
 
   const pendingInvoices = invoices.filter((inv) => inv.status === "pending");
   const totalPending = pendingInvoices.reduce((s, i) => s + i.total, 0);
@@ -48,28 +50,37 @@ export default function AdminPayments({ orders = [] }) {
 
   const submitPayment = (e) => {
     e.preventDefault();
-    if (!paymentForm.party.trim() || !paymentForm.amount) return;
+    if (!paymentForm.party.trim() || !paymentForm.amount) {
+      push({ type: "error", title: "Missing details", message: "Enter party and amount to save payment." });
+      return;
+    }
     setPayments((prev) => [
       { id: "PAY-" + String(prev.length + 1).padStart(3, "0"), date: paymentForm.date, type: "payment", party: paymentForm.party.trim(), amount: Number(paymentForm.amount), mode: paymentForm.mode, ref: paymentForm.ref, invoiceId: paymentForm.invoiceId || null },
       ...prev,
     ]);
     setPaymentForm({ date: new Date().toISOString().slice(0, 10), party: "", amount: "", mode: "Bank transfer", ref: "", invoiceId: "" });
     setShowPaymentForm(false);
+    push({ type: "success", title: "Payment saved", message: "Payment voucher has been recorded." });
   };
 
   const submitReceipt = (e) => {
     e.preventDefault();
-    if (!receiptForm.party.trim() || !receiptForm.amount) return;
+    if (!receiptForm.party.trim() || !receiptForm.amount) {
+      push({ type: "error", title: "Missing details", message: "Enter party and amount to save receipt." });
+      return;
+    }
     setPayments((prev) => [
       { id: "PAY-" + String(prev.length + 1).padStart(3, "0"), date: receiptForm.date, type: "receipt", party: receiptForm.party.trim(), amount: Number(receiptForm.amount), mode: receiptForm.mode, ref: receiptForm.ref, invoiceId: receiptForm.invoiceId || null },
       ...prev,
     ]);
     setReceiptForm({ date: new Date().toISOString().slice(0, 10), party: "", amount: "", mode: "UPI", ref: "", invoiceId: "" });
     setShowReceiptForm(false);
+    push({ type: "success", title: "Receipt saved", message: "Receipt voucher has been recorded." });
   };
 
   const addReconLine = () => {
     setRecon((prev) => [...prev, { date: new Date().toISOString().slice(0, 10), particulars: "New entry", bank: 0, book: 0, match: false }]);
+    push({ type: "success", title: "Entry added", message: "New reconciliation row added." });
   };
 
   const bootSkel = useBriefSkeleton();

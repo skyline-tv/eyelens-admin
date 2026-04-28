@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useBriefSkeleton } from "../../hooks/useBriefSkeleton";
+import { useToast } from "../../context/ToastContext";
 
 const reportTabs = [
   { id: "sales", label: "Sales report" },
@@ -24,6 +25,7 @@ export default function AdminReports({ orders = [], products = [] }) {
   const [tab, setTab] = useState("sales");
   const [period, setPeriod] = useState("month");
   const bootSkel = useBriefSkeleton();
+  const { push } = useToast();
   const now = Date.now();
   const periodStart = useMemo(() => {
     if (period === "today") return now - 24 * 60 * 60 * 1000;
@@ -69,10 +71,22 @@ export default function AdminReports({ orders = [], products = [] }) {
 
   const handleExport = () => {
     const d = new Date().toISOString().slice(0, 10);
-    if (tab === "sales") downloadCSV(["Date", "Invoice", "Customer", "Amount", "GST"], salesReportRows.map((r) => [r.date, r.invoice, r.customer, r.amount, r.gst]), `sales-report-${d}.csv`);
-    if (tab === "purchase") downloadCSV(["Date", "Bill", "Supplier", "Amount", "GST"], purchaseReportRows.map((r) => [r.date, r.bill, r.supplier, r.amount, r.gst]), `purchase-report-${d}.csv`);
-    if (tab === "stock") downloadCSV(["SKU", "Name", "Category", "Qty", "Value"], stockReportRows.map((r) => [r.sku, r.name, r.category, r.qty, r.value]), `stock-report-${d}.csv`);
-    if (tab === "financial") downloadCSV(["Report", "Value"], [["Revenue", salesTotal], ["Purchases", purchaseTotal], ["Stock value", stockValueTotal]], `financial-summary-${d}.csv`);
+    if (tab === "sales") {
+      downloadCSV(["Date", "Invoice", "Customer", "Amount", "GST"], salesReportRows.map((r) => [r.date, r.invoice, r.customer, r.amount, r.gst]), `sales-report-${d}.csv`);
+      push({ type: "success", title: "Exported", message: "Sales report CSV downloaded." });
+    }
+    if (tab === "purchase") {
+      downloadCSV(["Date", "Bill", "Supplier", "Amount", "GST"], purchaseReportRows.map((r) => [r.date, r.bill, r.supplier, r.amount, r.gst]), `purchase-report-${d}.csv`);
+      push({ type: "success", title: "Exported", message: "Purchase report CSV downloaded." });
+    }
+    if (tab === "stock") {
+      downloadCSV(["SKU", "Name", "Category", "Qty", "Value"], stockReportRows.map((r) => [r.sku, r.name, r.category, r.qty, r.value]), `stock-report-${d}.csv`);
+      push({ type: "success", title: "Exported", message: "Stock report CSV downloaded." });
+    }
+    if (tab === "financial") {
+      downloadCSV(["Report", "Value"], [["Revenue", salesTotal], ["Purchases", purchaseTotal], ["Stock value", stockValueTotal]], `financial-summary-${d}.csv`);
+      push({ type: "success", title: "Exported", message: "Financial summary CSV downloaded." });
+    }
   };
 
   if (bootSkel) {
