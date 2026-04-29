@@ -25,6 +25,7 @@ function mapRow(p) {
     images: Array.isArray(p.images) ? p.images : [],
     colors: Array.isArray(p.colors) ? p.colors : [],
     description: p.description || "",
+    modelNumber: p.modelNumber || "",
     frameType: p.frameType || "",
     material: p.material || "",
     warranty: p.warranty || "1 Year Full",
@@ -89,42 +90,53 @@ function mergeUniqueFiles(existing, incoming) {
   return merged;
 }
 
-function parseColorLines(text) {
-  const normalizeColorName = (raw) =>
-    String(raw || "")
-      .trim()
-      .replace(/^(color|colour)\s*[—\-:]\s*/i, "")
-      .trim();
+function toColorRows(colors) {
+  if (!Array.isArray(colors) || !colors.length) {
+    return [{ name: "", hex: "", stock: "", imagesText: "", imageFiles: [], imagePreviews: [], uploadPct: null }];
+  }
+  return colors.map((c) => ({
+    name: String(c?.name || ""),
+    hex: String(c?.hex || ""),
+    stock:
+      c?.stock === null || c?.stock === undefined || c?.stock === ""
+        ? ""
+        : String(Math.max(0, Math.floor(Number(c.stock) || 0))),
+    imagesText: Array.isArray(c?.images) ? c.images.filter(Boolean).join(", ") : "",
+    imageFiles: [],
+    imagePreviews: [],
+    uploadPct: null,
+  }));
+}
 
-  return parseLines(text)
-    .map((line) => {
-      const [namePart, hexPart = ""] = line.includes("|")
-        ? line.split("|")
-        : line.includes(",")
-          ? line.split(",")
-          : [line, ""];
-      const name = normalizeColorName(namePart);
+function fromColorRows(rows) {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((r) => {
+      const name = String(r?.name || "").trim();
       if (!name) return null;
-      return {
-        name,
-        hex: String(hexPart || "").trim(),
-        images: [],
-      };
+      const hex = String(r?.hex || "").trim();
+      const stockRaw = String(r?.stock ?? "").trim();
+      const stockNum = stockRaw === "" ? null : Number(stockRaw);
+      const stock = Number.isFinite(stockNum) && stockNum >= 0 ? Math.floor(stockNum) : null;
+      const images = String(r?.imagesText || "")
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean);
+      return { name, hex, stock, images };
     })
     .filter(Boolean);
 }
 
-function formatColorLines(colors) {
-  if (!Array.isArray(colors) || colors.length === 0) return "";
-  return colors
-    .map((c) => {
-      const name = String(c?.name || "").trim();
-      if (!name) return "";
-      const hex = String(c?.hex || "").trim();
-      return hex ? `${name} | ${hex}` : name;
-    })
-    .filter(Boolean)
-    .join("\n");
+function revokeColorPreviews(rows) {
+  for (const r of rows || []) {
+    for (const p of r?.imagePreviews || []) {
+      try {
+        URL.revokeObjectURL(p);
+      } catch {
+        // ignore
+      }
+    }
+  }
 }
 
 function compare(a, b, dir) {
@@ -154,6 +166,7 @@ export default function AdminProducts() {
     category: "Premium",
     stock: "",
     description: "",
+    modelNumber: "",
     frameType: "",
     material: "",
     warranty: "1 Year Full",
@@ -165,6 +178,9 @@ export default function AdminProducts() {
   const [addImageFiles, setAddImageFiles] = useState([]);
   const [addImagePreviews, setAddImagePreviews] = useState([]);
   const [addUploadPct, setAddUploadPct] = useState(null);
+  const [addColorRows, setAddColorRows] = useState([
+    { name: "", hex: "", stock: "", imagesText: "", imageFiles: [], imagePreviews: [], uploadPct: null },
+  ]);
   const addFileRef = useRef(null);
 
   const [editForm, setEditForm] = useState({});
@@ -172,6 +188,9 @@ export default function AdminProducts() {
   const [editImagePreviews, setEditImagePreviews] = useState([]);
   const [editImagePasteUrls, setEditImagePasteUrls] = useState("");
   const [editUploadPct, setEditUploadPct] = useState(null);
+  const [editColorRows, setEditColorRows] = useState([
+    { name: "", hex: "", stock: "", imagesText: "", imageFiles: [], imagePreviews: [], uploadPct: null },
+  ]);
   const editFileRef = useRef(null);
   const editModalRef = useRef(null);
 
@@ -200,9 +219,13 @@ export default function AdminProducts() {
       prev.forEach((url) => URL.revokeObjectURL(url));
       return [];
     });
+    revokeColorPreviews(editColorRows);
+    setEditColorRows([
+      { name: "", hex: "", stock: "", imagesText: "", imageFiles: [], imagePreviews: [], uploadPct: null },
+    ]);
     setEditImageFiles([]);
     setEditingProduct(null);
-  }, []);
+  }, [editColorRows]);
 
   useFocusTrap(editModalRef, Boolean(editingProduct), { onEscape: closeEditModal });
 
@@ -250,7 +273,34 @@ export default function AdminProducts() {
     }
     const origPrice = mrpNum != null && Number.isFinite(mrpNum) && mrpNum > priceNum ? mrpNum : undefined;
     let images = parseLines(addForm.imageUrlsText);
-    const colors = parseColorLines(addForm.colorsText);
+    const addRowsPrepared = addColorRows.map((r) => ({ ...r }));
+    for (let i = 0; i < addRowsPrepared.length; i += 1) {
+      const row = addRowsPrepared[i];
+      const files = Array.isArray(row.imageFiles) ? row.imageFiles : [];
+      if (!files.length) continue;
+      const { uploadedUrls, failedFiles } = await uploadProductImages(files, (pct) => {
+        setAddColorRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, uploadPct: pct } : r)));
+      });
+      const existing = String(row.imagesText || "")
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean);
+      const merged = [...new Set([...existing, ...uploadedUrls])];
+      addRowsPrepared[i] = { ...addRowsPrepared[i], imagesText: merged.join(", "), imageFiles: [], uploadPct: null };
+      if (failedFiles.length) {
+        push({
+          type: "error",
+          title: "Some color images were skipped",
+          message: `${failedFiles.length} file(s) failed in color row ${i + 1}.`,
+        });
+      }
+    }
+    setAddColorRows(addRowsPrepared);
+    const colors = fromColorRows(addRowsPrepared);
+    const hasColorStocks = colors.some((c) => Number.isFinite(Number(c.stock)));
+    const computedStock = hasColorStocks
+      ? colors.reduce((sum, c) => sum + (Number.isFinite(Number(c.stock)) ? Number(c.stock) : 0), 0)
+      : Number(addForm.stock) || 0;
     try {
       if (addImageFiles.length) {
         const { uploadedUrls, failedFiles } = await uploadProductImages(addImageFiles, setAddUploadPct);
@@ -270,8 +320,9 @@ export default function AdminProducts() {
         price: priceNum,
         ...(origPrice != null ? { origPrice } : {}),
         category: addForm.category,
-        stock: Number(addForm.stock) || 0,
+        stock: computedStock,
         description: addForm.description.trim(),
+        modelNumber: addForm.modelNumber.trim(),
         frameType: addForm.frameType.trim(),
         material: addForm.material.trim(),
         warranty: addForm.warranty.trim() || "1 Year Full",
@@ -291,14 +342,18 @@ export default function AdminProducts() {
         category: "Premium",
         stock: "",
         description: "",
+        modelNumber: "",
         frameType: "",
         material: "",
         warranty: "1 Year Full",
         deliveryPrimary: "Free delivery by Saturday",
         deliverySecondary: "Order before 6 PM today",
         imageUrlsText: "",
-        colorsText: "",
       });
+      revokeColorPreviews(addColorRows);
+      setAddColorRows([
+        { name: "", hex: "", stock: "", imagesText: "", imageFiles: [], imagePreviews: [], uploadPct: null },
+      ]);
       setAddImageFiles([]);
       setAddImagePreviews([]);
       setShowAddForm(false);
@@ -321,13 +376,14 @@ export default function AdminProducts() {
     setEditImagePreviews([]);
     setEditImagePasteUrls("");
     setEditUploadPct(null);
+    revokeColorPreviews(editColorRows);
+    setEditColorRows(toColorRows(p.colors));
     setEditingProduct(p);
     setEditForm({
       ...p,
       price: typeof p.price === "string" ? p.price.replace("₹", "").replace(/,/g, "") : String(p.priceNum ?? ""),
       mrp: p.origPrice != null ? String(p.origPrice) : "",
       images: Array.isArray(p.images) ? [...p.images] : [],
-      colorsText: formatColorLines(p.colors),
     });
   };
 
@@ -350,7 +406,34 @@ export default function AdminProducts() {
     const origPrice =
       mrpNum != null && Number.isFinite(mrpNum) && mrpNum > priceNum ? mrpNum : null;
     let images = [...(editForm.images || []), ...parseLines(editImagePasteUrls)];
-    const colors = parseColorLines(editForm.colorsText);
+    const editRowsPrepared = editColorRows.map((r) => ({ ...r }));
+    for (let i = 0; i < editRowsPrepared.length; i += 1) {
+      const row = editRowsPrepared[i];
+      const files = Array.isArray(row.imageFiles) ? row.imageFiles : [];
+      if (!files.length) continue;
+      const { uploadedUrls, failedFiles } = await uploadProductImages(files, (pct) => {
+        setEditColorRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, uploadPct: pct } : r)));
+      });
+      const existing = String(row.imagesText || "")
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean);
+      const merged = [...new Set([...existing, ...uploadedUrls])];
+      editRowsPrepared[i] = { ...editRowsPrepared[i], imagesText: merged.join(", "), imageFiles: [], uploadPct: null };
+      if (failedFiles.length) {
+        push({
+          type: "error",
+          title: "Some color images were skipped",
+          message: `${failedFiles.length} file(s) failed in color row ${i + 1}.`,
+        });
+      }
+    }
+    setEditColorRows(editRowsPrepared);
+    const colors = fromColorRows(editRowsPrepared);
+    const hasColorStocks = colors.some((c) => Number.isFinite(Number(c.stock)));
+    const computedStock = hasColorStocks
+      ? colors.reduce((sum, c) => sum + (Number.isFinite(Number(c.stock)) ? Number(c.stock) : 0), 0)
+      : Number(editForm.stock) || 0;
     try {
       if (editImageFiles.length) {
         const { uploadedUrls, failedFiles } = await uploadProductImages(editImageFiles, setEditUploadPct);
@@ -370,8 +453,9 @@ export default function AdminProducts() {
         price: priceNum,
         origPrice,
         category: editForm.category,
-        stock: Number(editForm.stock) || 0,
+        stock: computedStock,
         description: String(editForm.description || "").trim(),
+        modelNumber: String(editForm.modelNumber || "").trim(),
         frameType: String(editForm.frameType || "").trim(),
         material: String(editForm.material || "").trim(),
         warranty: String(editForm.warranty || "").trim() || "1 Year Full",
@@ -385,6 +469,10 @@ export default function AdminProducts() {
       setEditImageFiles([]);
       setEditImagePreviews([]);
       setEditImagePasteUrls("");
+      revokeColorPreviews(editColorRows);
+      setEditColorRows([
+        { name: "", hex: "", stock: "", imagesText: "", imageFiles: [], imagePreviews: [], uploadPct: null },
+      ]);
       await refresh();
       push({ type: "success", title: "Saved", message: "Product updated." });
     } catch (err) {
@@ -521,6 +609,15 @@ export default function AdminProducts() {
                   onChange={(e) => setAddForm((f) => ({ ...f, description: e.target.value }))}
                 />
               </div>
+              <div>
+                <label className="field-label">Model number</label>
+                <input
+                  className="input"
+                  placeholder="EL-MILANO-001"
+                  value={addForm.modelNumber}
+                  onChange={(e) => setAddForm((f) => ({ ...f, modelNumber: e.target.value }))}
+                />
+              </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
                 <div>
                   <label className="field-label">Frame type</label>
@@ -620,15 +717,127 @@ export default function AdminProducts() {
                   onChange={(e) => setAddForm((f) => ({ ...f, imageUrlsText: e.target.value }))}
                 />
                 <label className="field-label" style={{ marginTop: 12, display: "block" }}>
-                  Colors (one per line: Name | Hex)
+                  Colors (each color can have its own stock and images)
                 </label>
-                <textarea
-                  className="input"
-                  rows={3}
-                  placeholder={"Midnight Black | #231F20\nCrystal Clear | #D4E8F0"}
-                  value={addForm.colorsText}
-                  onChange={(e) => setAddForm((f) => ({ ...f, colorsText: e.target.value }))}
-                />
+                <div style={{ display: "grid", gap: 10 }}>
+                  {addColorRows.map((row, idx) => (
+                    <div key={`add-color-${idx}`} style={{ border: "1px solid var(--g200)", borderRadius: 10, padding: 10 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 0.8fr auto", gap: 8, marginBottom: 8 }}>
+                        <input
+                          className="input"
+                          placeholder="Color name"
+                          value={row.name}
+                          onChange={(e) =>
+                            setAddColorRows((prev) =>
+                              prev.map((r, i) => (i === idx ? { ...r, name: e.target.value } : r))
+                            )
+                          }
+                        />
+                        <input
+                          className="input"
+                          placeholder="#231F20"
+                          value={row.hex}
+                          onChange={(e) =>
+                            setAddColorRows((prev) =>
+                              prev.map((r, i) => (i === idx ? { ...r, hex: e.target.value } : r))
+                            )
+                          }
+                        />
+                        <input
+                          className="input"
+                          type="number"
+                          min={0}
+                          placeholder="Stock"
+                          value={row.stock}
+                          onChange={(e) =>
+                            setAddColorRows((prev) =>
+                              prev.map((r, i) => (i === idx ? { ...r, stock: e.target.value } : r))
+                            )
+                          }
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() =>
+                            setAddColorRows((prev) =>
+                              prev.length > 1 ? prev.filter((_, i) => i !== idx) : [{ name: "", hex: "", stock: "", imagesText: "" }]
+                            )
+                          }
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <input
+                        className="input"
+                        placeholder="Color images (comma separated URLs)"
+                        value={row.imagesText}
+                        onChange={(e) =>
+                          setAddColorRows((prev) =>
+                            prev.map((r, i) => (i === idx ? { ...r, imagesText: e.target.value } : r))
+                          )
+                        }
+                      />
+                      <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
+                        <input
+                          id={`add-color-files-${idx}`}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          multiple
+                          style={{ display: "none" }}
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            if (!files.length) return;
+                            const previews = files.map((f) => URL.createObjectURL(f));
+                            setAddColorRows((prev) =>
+                              prev.map((r, i) =>
+                                i === idx
+                                  ? {
+                                      ...r,
+                                      imageFiles: mergeUniqueFiles(r.imageFiles || [], files),
+                                      imagePreviews: [...(r.imagePreviews || []), ...previews],
+                                    }
+                                  : r
+                              )
+                            );
+                            e.target.value = "";
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => document.getElementById(`add-color-files-${idx}`)?.click()}
+                        >
+                          Upload color images
+                        </button>
+                        {row.uploadPct != null ? <span style={{ fontSize: 12, color: "var(--g600)" }}>Uploading... {row.uploadPct}%</span> : null}
+                      </div>
+                      {Array.isArray(row.imagePreviews) && row.imagePreviews.length > 0 ? (
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                          {row.imagePreviews.map((src, pidx) => (
+                            <img
+                              key={`${idx}-${pidx}`}
+                              src={src}
+                              alt="Color preview"
+                              style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8, border: "1px solid var(--g200)" }}
+                            />
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() =>
+                      setAddColorRows((prev) => [
+                        ...prev,
+                        { name: "", hex: "", stock: "", imagesText: "", imageFiles: [], imagePreviews: [], uploadPct: null },
+                      ])
+                    }
+                  >
+                    + Add color row
+                  </button>
+                </div>
               </div>
               <button type="submit" className="btn btn-primary">
                 Add product
@@ -863,6 +1072,14 @@ export default function AdminProducts() {
                   onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
                 />
               </div>
+              <div>
+                <label className="field-label">Model number</label>
+                <input
+                  className="input"
+                  value={editForm.modelNumber || ""}
+                  onChange={(e) => setEditForm((f) => ({ ...f, modelNumber: e.target.value }))}
+                />
+              </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
                 <div>
                   <label className="field-label">Frame type</label>
@@ -968,15 +1185,127 @@ export default function AdminProducts() {
                   onChange={(e) => setEditImagePasteUrls(e.target.value)}
                 />
                 <label className="field-label" style={{ marginTop: 12, display: "block" }}>
-                  Colors (one per line: Name | Hex)
+                  Colors (each color can have its own stock and images)
                 </label>
-                <textarea
-                  className="input"
-                  rows={3}
-                  placeholder={"Midnight Black | #231F20\nCrystal Clear | #D4E8F0"}
-                  value={editForm.colorsText || ""}
-                  onChange={(e) => setEditForm((f) => ({ ...f, colorsText: e.target.value }))}
-                />
+                <div style={{ display: "grid", gap: 10 }}>
+                  {editColorRows.map((row, idx) => (
+                    <div key={`edit-color-${idx}`} style={{ border: "1px solid var(--g200)", borderRadius: 10, padding: 10 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 0.8fr auto", gap: 8, marginBottom: 8 }}>
+                        <input
+                          className="input"
+                          placeholder="Color name"
+                          value={row.name}
+                          onChange={(e) =>
+                            setEditColorRows((prev) =>
+                              prev.map((r, i) => (i === idx ? { ...r, name: e.target.value } : r))
+                            )
+                          }
+                        />
+                        <input
+                          className="input"
+                          placeholder="#231F20"
+                          value={row.hex}
+                          onChange={(e) =>
+                            setEditColorRows((prev) =>
+                              prev.map((r, i) => (i === idx ? { ...r, hex: e.target.value } : r))
+                            )
+                          }
+                        />
+                        <input
+                          className="input"
+                          type="number"
+                          min={0}
+                          placeholder="Stock"
+                          value={row.stock}
+                          onChange={(e) =>
+                            setEditColorRows((prev) =>
+                              prev.map((r, i) => (i === idx ? { ...r, stock: e.target.value } : r))
+                            )
+                          }
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() =>
+                            setEditColorRows((prev) =>
+                              prev.length > 1 ? prev.filter((_, i) => i !== idx) : [{ name: "", hex: "", stock: "", imagesText: "" }]
+                            )
+                          }
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <input
+                        className="input"
+                        placeholder="Color images (comma separated URLs)"
+                        value={row.imagesText}
+                        onChange={(e) =>
+                          setEditColorRows((prev) =>
+                            prev.map((r, i) => (i === idx ? { ...r, imagesText: e.target.value } : r))
+                          )
+                        }
+                      />
+                      <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
+                        <input
+                          id={`edit-color-files-${idx}`}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          multiple
+                          style={{ display: "none" }}
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            if (!files.length) return;
+                            const previews = files.map((f) => URL.createObjectURL(f));
+                            setEditColorRows((prev) =>
+                              prev.map((r, i) =>
+                                i === idx
+                                  ? {
+                                      ...r,
+                                      imageFiles: mergeUniqueFiles(r.imageFiles || [], files),
+                                      imagePreviews: [...(r.imagePreviews || []), ...previews],
+                                    }
+                                  : r
+                              )
+                            );
+                            e.target.value = "";
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => document.getElementById(`edit-color-files-${idx}`)?.click()}
+                        >
+                          Upload color images
+                        </button>
+                        {row.uploadPct != null ? <span style={{ fontSize: 12, color: "var(--g600)" }}>Uploading... {row.uploadPct}%</span> : null}
+                      </div>
+                      {Array.isArray(row.imagePreviews) && row.imagePreviews.length > 0 ? (
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                          {row.imagePreviews.map((src, pidx) => (
+                            <img
+                              key={`${idx}-${pidx}`}
+                              src={src}
+                              alt="Color preview"
+                              style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8, border: "1px solid var(--g200)" }}
+                            />
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() =>
+                      setEditColorRows((prev) => [
+                        ...prev,
+                        { name: "", hex: "", stock: "", imagesText: "", imageFiles: [], imagePreviews: [], uploadPct: null },
+                      ])
+                    }
+                  >
+                    + Add color row
+                  </button>
+                </div>
               </div>
               <button type="submit" className="btn btn-primary">
                 Save changes
