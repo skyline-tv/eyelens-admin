@@ -24,6 +24,12 @@ function mapRow(p) {
     reviewCount: p.reviewCount ?? 0,
     images: Array.isArray(p.images) ? p.images : [],
     colors: Array.isArray(p.colors) ? p.colors : [],
+    description: p.description || "",
+    frameType: p.frameType || "",
+    material: p.material || "",
+    warranty: p.warranty || "1 Year Full",
+    deliveryPrimary: p.deliveryPrimary || "Free delivery by Saturday",
+    deliverySecondary: p.deliverySecondary || "Order before 6 PM today",
   };
 }
 
@@ -147,6 +153,12 @@ export default function AdminProducts() {
     mrp: "",
     category: "Premium",
     stock: "",
+    description: "",
+    frameType: "",
+    material: "",
+    warranty: "1 Year Full",
+    deliveryPrimary: "Free delivery by Saturday",
+    deliverySecondary: "Order before 6 PM today",
     imageUrlsText: "",
     colorsText: "",
   });
@@ -259,9 +271,12 @@ export default function AdminProducts() {
         ...(origPrice != null ? { origPrice } : {}),
         category: addForm.category,
         stock: Number(addForm.stock) || 0,
-        description: "",
-        frameType: "",
-        material: "",
+        description: addForm.description.trim(),
+        frameType: addForm.frameType.trim(),
+        material: addForm.material.trim(),
+        warranty: addForm.warranty.trim() || "1 Year Full",
+        deliveryPrimary: addForm.deliveryPrimary.trim() || "Free delivery by Saturday",
+        deliverySecondary: addForm.deliverySecondary.trim() || "Order before 6 PM today",
         gender: "unisex",
         images,
         colors,
@@ -275,6 +290,12 @@ export default function AdminProducts() {
         mrp: "",
         category: "Premium",
         stock: "",
+        description: "",
+        frameType: "",
+        material: "",
+        warranty: "1 Year Full",
+        deliveryPrimary: "Free delivery by Saturday",
+        deliverySecondary: "Order before 6 PM today",
         imageUrlsText: "",
         colorsText: "",
       });
@@ -350,6 +371,12 @@ export default function AdminProducts() {
         origPrice,
         category: editForm.category,
         stock: Number(editForm.stock) || 0,
+        description: String(editForm.description || "").trim(),
+        frameType: String(editForm.frameType || "").trim(),
+        material: String(editForm.material || "").trim(),
+        warranty: String(editForm.warranty || "").trim() || "1 Year Full",
+        deliveryPrimary: String(editForm.deliveryPrimary || "").trim() || "Free delivery by Saturday",
+        deliverySecondary: String(editForm.deliverySecondary || "").trim() || "Order before 6 PM today",
         images,
         colors,
       });
@@ -464,13 +491,13 @@ export default function AdminProducts() {
                 </div>
                 <div>
                   <label className="field-label">Category</label>
-                  <select className="input" value={addForm.category} onChange={(e) => setAddForm((f) => ({ ...f, category: e.target.value }))}>
-                    {categories.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
+                  <input
+                    className="input"
+                    list="admin-product-categories"
+                    placeholder="Premium"
+                    value={addForm.category}
+                    onChange={(e) => setAddForm((f) => ({ ...f, category: e.target.value }))}
+                  />
                 </div>
               </div>
               <div>
@@ -483,6 +510,65 @@ export default function AdminProducts() {
                   value={addForm.stock}
                   onChange={(e) => setAddForm((f) => ({ ...f, stock: e.target.value }))}
                 />
+              </div>
+              <div>
+                <label className="field-label">Description</label>
+                <textarea
+                  className="input"
+                  rows={3}
+                  placeholder="Short product description"
+                  value={addForm.description}
+                  onChange={(e) => setAddForm((f) => ({ ...f, description: e.target.value }))}
+                />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+                <div>
+                  <label className="field-label">Frame type</label>
+                  <input
+                    className="input"
+                    placeholder="Rectangle"
+                    value={addForm.frameType}
+                    onChange={(e) => setAddForm((f) => ({ ...f, frameType: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="field-label">Frame material</label>
+                  <input
+                    className="input"
+                    placeholder="Acetate"
+                    value={addForm.material}
+                    onChange={(e) => setAddForm((f) => ({ ...f, material: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="field-label">Warranty</label>
+                  <input
+                    className="input"
+                    placeholder="1 Year Full"
+                    value={addForm.warranty}
+                    onChange={(e) => setAddForm((f) => ({ ...f, warranty: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <div>
+                  <label className="field-label">Delivery primary text</label>
+                  <input
+                    className="input"
+                    placeholder="Free delivery by Saturday"
+                    value={addForm.deliveryPrimary}
+                    onChange={(e) => setAddForm((f) => ({ ...f, deliveryPrimary: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="field-label">Delivery secondary text</label>
+                  <input
+                    className="input"
+                    placeholder="Order before 6 PM today"
+                    value={addForm.deliverySecondary}
+                    onChange={(e) => setAddForm((f) => ({ ...f, deliverySecondary: e.target.value }))}
+                  />
+                </div>
               </div>
               <div>
                 <label className="field-label">Product photos (multiple)</label>
@@ -751,13 +837,12 @@ export default function AdminProducts() {
               </div>
               <div>
                 <label className="field-label">Category</label>
-                <select className="input" value={editForm.category || ""} onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value }))}>
-                  {categories.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
+                <input
+                  className="input"
+                  list="admin-product-categories"
+                  value={editForm.category || ""}
+                  onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value }))}
+                />
               </div>
               <div>
                 <label className="field-label">Stock</label>
@@ -768,6 +853,59 @@ export default function AdminProducts() {
                   value={editForm.stock ?? ""}
                   onChange={(e) => setEditForm((f) => ({ ...f, stock: e.target.value }))}
                 />
+              </div>
+              <div>
+                <label className="field-label">Description</label>
+                <textarea
+                  className="input"
+                  rows={3}
+                  value={editForm.description || ""}
+                  onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+                />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+                <div>
+                  <label className="field-label">Frame type</label>
+                  <input
+                    className="input"
+                    value={editForm.frameType || ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, frameType: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="field-label">Frame material</label>
+                  <input
+                    className="input"
+                    value={editForm.material || ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, material: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="field-label">Warranty</label>
+                  <input
+                    className="input"
+                    value={editForm.warranty || ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, warranty: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <div>
+                  <label className="field-label">Delivery primary text</label>
+                  <input
+                    className="input"
+                    value={editForm.deliveryPrimary || ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, deliveryPrimary: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="field-label">Delivery secondary text</label>
+                  <input
+                    className="input"
+                    value={editForm.deliverySecondary || ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, deliverySecondary: e.target.value }))}
+                  />
+                </div>
               </div>
               <div>
                 <label className="field-label">Product photos</label>
@@ -880,6 +1018,11 @@ export default function AdminProducts() {
           This action cannot be undone.
         </div>
       </ConfirmModal>
+      <datalist id="admin-product-categories">
+        {categories.map((c) => (
+          <option key={c} value={c} />
+        ))}
+      </datalist>
     </div>
   );
 }
