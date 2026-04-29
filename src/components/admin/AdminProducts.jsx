@@ -25,8 +25,11 @@ function mapRow(p) {
     images: Array.isArray(p.images) ? p.images : [],
     colors: Array.isArray(p.colors) ? p.colors : [],
     description: p.description || "",
+    productHighlights: p.productHighlights || "",
     modelNumber: p.modelNumber || "",
+    gender: p.gender || "unisex",
     frameType: p.frameType || "",
+    frameSize: p.frameSize || "",
     material: p.material || "",
     warranty: p.warranty || "1 Year Full",
     deliveryPrimary: p.deliveryPrimary || "Free delivery by Saturday",
@@ -166,8 +169,11 @@ export default function AdminProducts() {
     category: "Premium",
     stock: "",
     description: "",
+    productHighlights: "",
     modelNumber: "",
+    gender: "unisex",
     frameType: "",
+    frameSize: "",
     material: "",
     warranty: "1 Year Full",
     deliveryPrimary: "Free delivery by Saturday",
@@ -249,6 +255,7 @@ export default function AdminProducts() {
     if (sort.key === "rating") return compare(a.averageRating ?? 0, b.averageRating ?? 0, sort.dir);
     if (sort.key === "brand") return compare(a.brand, b.brand, sort.dir);
     if (sort.key === "category") return compare(a.category, b.category, sort.dir);
+    if (sort.key === "gender") return compare(a.gender, b.gender, sort.dir);
     return compare(a.name, b.name, sort.dir);
   });
 
@@ -256,6 +263,16 @@ export default function AdminProducts() {
     setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
   };
   const sortGlyph = (key) => (sort.key === key ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
+  const addColorStockTotal = addColorRows.reduce(
+    (sum, r) => sum + (Number.isFinite(Number(r?.stock)) ? Math.max(0, Number(r.stock)) : 0),
+    0
+  );
+  const addUsesColorStock = addColorRows.some((r) => Number.isFinite(Number(r?.stock)));
+  const editColorStockTotal = editColorRows.reduce(
+    (sum, r) => sum + (Number.isFinite(Number(r?.stock)) ? Math.max(0, Number(r.stock)) : 0),
+    0
+  );
+  const editUsesColorStock = editColorRows.some((r) => Number.isFinite(Number(r?.stock)));
 
   const handleAdd = async (e) => {
     e.preventDefault();
@@ -272,7 +289,7 @@ export default function AdminProducts() {
       return;
     }
     const origPrice = mrpNum != null && Number.isFinite(mrpNum) && mrpNum > priceNum ? mrpNum : undefined;
-    let images = parseLines(addForm.imageUrlsText);
+    let images = [];
     const addRowsPrepared = addColorRows.map((r) => ({ ...r }));
     for (let i = 0; i < addRowsPrepared.length; i += 1) {
       const row = addRowsPrepared[i];
@@ -322,8 +339,11 @@ export default function AdminProducts() {
         category: addForm.category,
         stock: computedStock,
         description: addForm.description.trim(),
+        productHighlights: addForm.productHighlights.trim(),
         modelNumber: addForm.modelNumber.trim(),
+        gender: addForm.gender || "unisex",
         frameType: addForm.frameType.trim(),
+        frameSize: addForm.frameSize.trim(),
         material: addForm.material.trim(),
         warranty: addForm.warranty.trim() || "1 Year Full",
         deliveryPrimary: addForm.deliveryPrimary.trim() || "Free delivery by Saturday",
@@ -342,8 +362,11 @@ export default function AdminProducts() {
         category: "Premium",
         stock: "",
         description: "",
+        productHighlights: "",
         modelNumber: "",
+        gender: "unisex",
         frameType: "",
+        frameSize: "",
         material: "",
         warranty: "1 Year Full",
         deliveryPrimary: "Free delivery by Saturday",
@@ -455,8 +478,11 @@ export default function AdminProducts() {
         category: editForm.category,
         stock: computedStock,
         description: String(editForm.description || "").trim(),
+        productHighlights: String(editForm.productHighlights || "").trim(),
         modelNumber: String(editForm.modelNumber || "").trim(),
+        gender: String(editForm.gender || "unisex"),
         frameType: String(editForm.frameType || "").trim(),
+        frameSize: String(editForm.frameSize || "").trim(),
         material: String(editForm.material || "").trim(),
         warranty: String(editForm.warranty || "").trim() || "1 Year Full",
         deliveryPrimary: String(editForm.deliveryPrimary || "").trim() || "Free delivery by Saturday",
@@ -597,7 +623,17 @@ export default function AdminProducts() {
                   placeholder="0"
                   value={addForm.stock}
                   onChange={(e) => setAddForm((f) => ({ ...f, stock: e.target.value }))}
+                  disabled={addUsesColorStock}
                 />
+                {addUsesColorStock ? (
+                  <span style={{ fontSize: 11, color: "var(--g500)", marginTop: 4, display: "block" }}>
+                    Total stock auto-calculated from color stock: <strong style={{ color: "var(--black)" }}>{addColorStockTotal}</strong>
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 11, color: "var(--g500)", marginTop: 4, display: "block" }}>
+                    Used only when color-wise stock is not provided.
+                  </span>
+                )}
               </div>
               <div>
                 <label className="field-label">Description</label>
@@ -610,6 +646,16 @@ export default function AdminProducts() {
                 />
               </div>
               <div>
+                <label className="field-label">Product Highlights (one per line)</label>
+                <textarea
+                  className="input"
+                  rows={3}
+                  placeholder={"Lightweight frame\nScratch-resistant finish\nAll-day comfort fit"}
+                  value={addForm.productHighlights}
+                  onChange={(e) => setAddForm((f) => ({ ...f, productHighlights: e.target.value }))}
+                />
+              </div>
+              <div>
                 <label className="field-label">Model number</label>
                 <input
                   className="input"
@@ -618,7 +664,7 @@ export default function AdminProducts() {
                   onChange={(e) => setAddForm((f) => ({ ...f, modelNumber: e.target.value }))}
                 />
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 14 }}>
                 <div>
                   <label className="field-label">Frame type</label>
                   <input
@@ -627,6 +673,28 @@ export default function AdminProducts() {
                     value={addForm.frameType}
                     onChange={(e) => setAddForm((f) => ({ ...f, frameType: e.target.value }))}
                   />
+                </div>
+                <div>
+                  <label className="field-label">Size</label>
+                  <input
+                    className="input"
+                    placeholder="Medium / 52-18-140"
+                    value={addForm.frameSize}
+                    onChange={(e) => setAddForm((f) => ({ ...f, frameSize: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="field-label">Gender</label>
+                  <select
+                    className="input"
+                    value={addForm.gender}
+                    onChange={(e) => setAddForm((f) => ({ ...f, gender: e.target.value }))}
+                  >
+                    <option value="unisex">Unisex</option>
+                    <option value="men">Men</option>
+                    <option value="women">Women</option>
+                    <option value="kids">Kids</option>
+                  </select>
                 </div>
                 <div>
                   <label className="field-label">Frame material</label>
@@ -706,16 +774,6 @@ export default function AdminProducts() {
                 {addUploadPct != null ? (
                   <div style={{ fontSize: 12, color: "var(--g600)", marginTop: 6 }}>Uploading… {addUploadPct}%</div>
                 ) : null}
-                <label className="field-label" style={{ marginTop: 12, display: "block" }}>
-                  Or paste image URLs (one per line)
-                </label>
-                <textarea
-                  className="input"
-                  rows={3}
-                  placeholder={"https://...\nhttps://..."}
-                  value={addForm.imageUrlsText}
-                  onChange={(e) => setAddForm((f) => ({ ...f, imageUrlsText: e.target.value }))}
-                />
                 <label className="field-label" style={{ marginTop: 12, display: "block" }}>
                   Colors (each color can have its own stock and images)
                 </label>
@@ -858,6 +916,7 @@ export default function AdminProducts() {
                     <th>Product</th>
                     <th>Brand</th>
                     <th>Category</th>
+                    <th>Gender</th>
                     <th>MRP / Selling</th>
                     <th>Avg rating</th>
                     <th>Stock</th>
@@ -868,7 +927,7 @@ export default function AdminProducts() {
                 <tbody>
                   {Array.from({ length: 8 }).map((_, r) => (
                     <tr key={r}>
-                      {Array.from({ length: 9 }).map((_, c) => (
+                      {Array.from({ length: 10 }).map((_, c) => (
                         <td key={c} style={{ padding: "14px 10px" }}>
                           <div
                             className="adm-skel-row"
@@ -896,6 +955,7 @@ export default function AdminProducts() {
                     <th style={{ cursor: "pointer" }} onClick={() => toggleSort("name")}>Product{sortGlyph("name")}</th>
                     <th style={{ cursor: "pointer" }} onClick={() => toggleSort("brand")}>Brand{sortGlyph("brand")}</th>
                     <th style={{ cursor: "pointer" }} onClick={() => toggleSort("category")}>Category{sortGlyph("category")}</th>
+                    <th style={{ cursor: "pointer" }} onClick={() => toggleSort("gender")}>Gender{sortGlyph("gender")}</th>
                     <th style={{ cursor: "pointer" }} onClick={() => toggleSort("price")}>MRP / Selling{sortGlyph("price")}</th>
                     <th style={{ cursor: "pointer" }} onClick={() => toggleSort("rating")}>Avg rating{sortGlyph("rating")}</th>
                     <th style={{ cursor: "pointer" }} onClick={() => toggleSort("stock")}>Stock{sortGlyph("stock")}</th>
@@ -917,6 +977,7 @@ export default function AdminProducts() {
                           {p.category}
                         </span>
                       </td>
+                      <td style={{ textTransform: "capitalize" }}>{p.gender || "unisex"}</td>
                       <td>
                         {p.origPrice != null ? (
                           <div style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: "flex-start" }}>
@@ -1061,7 +1122,17 @@ export default function AdminProducts() {
                   min={0}
                   value={editForm.stock ?? ""}
                   onChange={(e) => setEditForm((f) => ({ ...f, stock: e.target.value }))}
+                  disabled={editUsesColorStock}
                 />
+                {editUsesColorStock ? (
+                  <span style={{ fontSize: 11, color: "var(--g500)", marginTop: 4, display: "block" }}>
+                    Total stock auto-calculated from color stock: <strong style={{ color: "var(--black)" }}>{editColorStockTotal}</strong>
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 11, color: "var(--g500)", marginTop: 4, display: "block" }}>
+                    Used only when color-wise stock is not provided.
+                  </span>
+                )}
               </div>
               <div>
                 <label className="field-label">Description</label>
@@ -1073,6 +1144,15 @@ export default function AdminProducts() {
                 />
               </div>
               <div>
+                <label className="field-label">Product Highlights (one per line)</label>
+                <textarea
+                  className="input"
+                  rows={3}
+                  value={editForm.productHighlights || ""}
+                  onChange={(e) => setEditForm((f) => ({ ...f, productHighlights: e.target.value }))}
+                />
+              </div>
+              <div>
                 <label className="field-label">Model number</label>
                 <input
                   className="input"
@@ -1080,7 +1160,7 @@ export default function AdminProducts() {
                   onChange={(e) => setEditForm((f) => ({ ...f, modelNumber: e.target.value }))}
                 />
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 14 }}>
                 <div>
                   <label className="field-label">Frame type</label>
                   <input
@@ -1088,6 +1168,27 @@ export default function AdminProducts() {
                     value={editForm.frameType || ""}
                     onChange={(e) => setEditForm((f) => ({ ...f, frameType: e.target.value }))}
                   />
+                </div>
+                <div>
+                  <label className="field-label">Size</label>
+                  <input
+                    className="input"
+                    value={editForm.frameSize || ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, frameSize: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="field-label">Gender</label>
+                  <select
+                    className="input"
+                    value={editForm.gender || "unisex"}
+                    onChange={(e) => setEditForm((f) => ({ ...f, gender: e.target.value }))}
+                  >
+                    <option value="unisex">Unisex</option>
+                    <option value="men">Men</option>
+                    <option value="women">Women</option>
+                    <option value="kids">Kids</option>
+                  </select>
                 </div>
                 <div>
                   <label className="field-label">Frame material</label>
