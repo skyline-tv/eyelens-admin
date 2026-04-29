@@ -1,6 +1,9 @@
 import { useState } from "react";
+import { api } from "../../api/axiosInstance";
+import { useToast } from "../../context/ToastContext";
 
 export default function AdminSettings() {
+  const { push } = useToast();
   const [notifyOrders, setNotifyOrders] = useState(true);
   const [notifyReturns, setNotifyReturns] = useState(true);
   const [notifyLowStock, setNotifyLowStock] = useState(true);
@@ -14,7 +17,8 @@ export default function AdminSettings() {
   const [savedStore, setSavedStore] = useState(false);
   const [savedPrefs, setSavedPrefs] = useState(false);
   const [savedShipping, setSavedShipping] = useState(false);
-  const [clearConfirm, setClearConfirm] = useState(false);
+  const [resetConfirm, setResetConfirm] = useState(false);
+  const [resettingData, setResettingData] = useState(false);
 
   const handleSaveStore = (e) => {
     e.preventDefault();
@@ -34,18 +38,31 @@ export default function AdminSettings() {
     setTimeout(() => setSavedShipping(false), 2500);
   };
 
-  const handleClearTestData = () => {
-    if (!clearConfirm) {
-      setClearConfirm(true);
-      setTimeout(() => setClearConfirm(false), 3000);
+  const handleResetDataKeepLogin = async () => {
+    if (resettingData) return;
+    if (!resetConfirm) {
+      setResetConfirm(true);
+      setTimeout(() => setResetConfirm(false), 3000);
       return;
     }
-    setStoreName("Eyelens");
-    setSupportEmail("support@eyelens.in");
-    setSupportPhone("+91 80 4567 8900");
-    setDeliveryDays(5);
-    setFreeShippingAbove(999);
-    setClearConfirm(false);
+    setResettingData(true);
+    try {
+      const { data } = await api.post("/stats/reset-data-keep-login");
+      push({
+        type: "success",
+        title: "Data reset complete",
+        message: data?.message || "All data except login users has been cleared.",
+      });
+      setResetConfirm(false);
+    } catch (err) {
+      push({
+        type: "error",
+        title: "Reset failed",
+        message: err?.response?.data?.message || err?.message || "Could not reset data.",
+      });
+    } finally {
+      setResettingData(false);
+    }
   };
 
   return (
@@ -146,11 +163,16 @@ export default function AdminSettings() {
           <p style={{ fontSize: 13, color: "#6B7280", marginBottom: 16 }}>Irreversible actions. Use with caution.</p>
           <button
             type="button"
-            className={`btn btn-sm ${clearConfirm ? "btn-danger" : "btn-ghost"}`}
-            style={clearConfirm ? { border: "1.5px solid var(--red)" } : {}}
-            onClick={handleClearTestData}
+            className={`btn btn-sm ${resetConfirm ? "btn-danger" : "btn-ghost"}`}
+            style={resetConfirm ? { border: "1.5px solid var(--red)" } : {}}
+            onClick={handleResetDataKeepLogin}
+            disabled={resettingData}
           >
-            {clearConfirm ? "Click again to reset settings" : "Clear test data"}
+            {resettingData
+              ? "Resetting data..."
+              : resetConfirm
+                ? "Click again to reset data (keep login)"
+                : "Reset all data (keep login)"}
           </button>
         </div>
       </div>

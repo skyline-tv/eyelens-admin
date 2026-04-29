@@ -105,11 +105,7 @@ code {
 }
 
 html {
-  color-scheme: light dark;
-}
-
-html.dark {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 .skip-to-main {
