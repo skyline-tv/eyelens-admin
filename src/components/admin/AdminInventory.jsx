@@ -53,6 +53,7 @@ export default function AdminInventory({ startInLowFilter = false }) {
   });
 
   const lowCount = items.filter((i) => i.status === "low" || i.status === "out").length;
+  const totalStockPcs = items.reduce((sum, item) => sum + item.stock, 0);
 
   const saveStock = async (row) => {
     const num = parseInt(newStock, 10);
@@ -91,6 +92,11 @@ export default function AdminInventory({ startInLowFilter = false }) {
               <div className="adm-skel-row" style={{ width: "55%", marginBottom: 8 }} />
               <div className="adm-skel-row" style={{ width: "35%" }} />
             </div>
+            <div className="kpi-card">
+              <div className="adm-skel-row" style={{ width: 48, height: 48, borderRadius: 12, marginBottom: 12 }} />
+              <div className="adm-skel-row" style={{ width: "55%", marginBottom: 8 }} />
+              <div className="adm-skel-row" style={{ width: "35%" }} />
+            </div>
           </>
         ) : (
           <>
@@ -98,6 +104,11 @@ export default function AdminInventory({ startInLowFilter = false }) {
               <div className="kpi-icon" style={{ background: "var(--em-light)" }}>📦</div>
               <div className="kpi-label">Total SKUs</div>
               <div className="kpi-value">{items.length}</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-icon" style={{ background: "#EEF8FF" }}>🧮</div>
+              <div className="kpi-label">Total Stock (pcs)</div>
+              <div className="kpi-value">{totalStockPcs}</div>
             </div>
             <div className="kpi-card">
               <div className="kpi-icon" style={{ background: "#FEF8EE" }}>⚠️</div>
