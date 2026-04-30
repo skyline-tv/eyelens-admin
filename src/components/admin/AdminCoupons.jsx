@@ -9,6 +9,7 @@ function formatDate(d) {
 }
 
 function displayDiscount(c) {
+  if (c.bogoEnabled) return "Buy 1 Get 1 (frame)";
   if (c.discountType === "flat") return `₹${c.discountValue} off`;
   return `${c.discountValue}% off`;
 }
@@ -27,6 +28,10 @@ export default function AdminCoupons() {
     minOrderValue: "",
     maxUses: "",
     expiresAt: "",
+    oneTimePerUser: false,
+    newUsersOnly: false,
+    frameOnlyDiscount: false,
+    bogoEnabled: false,
   });
   const [confirmDelete, setConfirmDelete] = useState(null);
 
@@ -58,16 +63,20 @@ export default function AdminCoupons() {
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    if (!form.code.trim() || !form.discountValue) return;
+    if (!form.code.trim() || (!form.bogoEnabled && !form.discountValue)) return;
     try {
       await api.post("/coupons", {
         code: form.code.trim().toUpperCase(),
         label: form.label.trim() || form.code.trim(),
         discountType: form.discountType === "percent" ? "percentage" : "flat",
-        discountValue: Number(form.discountValue),
+        discountValue: form.bogoEnabled ? 0 : Number(form.discountValue),
         minOrderValue: Number(form.minOrderValue) || 0,
         maxUses: form.maxUses === "" ? null : Number(form.maxUses),
         expiresAt: form.expiresAt ? new Date(form.expiresAt).toISOString() : null,
+        oneTimePerUser: Boolean(form.oneTimePerUser),
+        newUsersOnly: Boolean(form.newUsersOnly),
+        frameOnlyDiscount: Boolean(form.frameOnlyDiscount),
+        bogoEnabled: Boolean(form.bogoEnabled),
         isActive: true,
       });
       push({ type: "success", title: "Created", message: "Coupon is live." });
@@ -79,6 +88,10 @@ export default function AdminCoupons() {
         minOrderValue: "",
         maxUses: "",
         expiresAt: "",
+        oneTimePerUser: false,
+        newUsersOnly: false,
+        frameOnlyDiscount: false,
+        bogoEnabled: false,
       });
       setShowForm(false);
       await refresh();
@@ -173,7 +186,8 @@ export default function AdminCoupons() {
                     min={1}
                     value={form.discountValue}
                     onChange={(e) => setForm((f) => ({ ...f, discountValue: e.target.value }))}
-                    required
+                    required={!form.bogoEnabled}
+                    disabled={form.bogoEnabled}
                   />
                 </div>
                 <div>
@@ -202,6 +216,42 @@ export default function AdminCoupons() {
                   <label className="field-label">Expires (optional)</label>
                   <input className="input" type="date" value={form.expiresAt} onChange={(e) => setForm((f) => ({ ...f, expiresAt: e.target.value }))} />
                 </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                  <input
+                    type="checkbox"
+                    checked={form.frameOnlyDiscount}
+                    onChange={(e) => setForm((f) => ({ ...f, frameOnlyDiscount: e.target.checked }))}
+                  />
+                  Apply on frame only (exclude lenses)
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                  <input
+                    type="checkbox"
+                    checked={form.newUsersOnly}
+                    onChange={(e) => setForm((f) => ({ ...f, newUsersOnly: e.target.checked }))}
+                  />
+                  New account / first order only
+                </label>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                  <input
+                    type="checkbox"
+                    checked={form.oneTimePerUser}
+                    onChange={(e) => setForm((f) => ({ ...f, oneTimePerUser: e.target.checked }))}
+                  />
+                  One time per user
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                  <input
+                    type="checkbox"
+                    checked={form.bogoEnabled}
+                    onChange={(e) => setForm((f) => ({ ...f, bogoEnabled: e.target.checked }))}
+                  />
+                  Buy 1 Get 1 Free (frames)
+                </label>
               </div>
               <button type="submit" className="btn btn-primary" style={{ width: "fit-content" }}>
                 Create coupon
@@ -255,6 +305,7 @@ export default function AdminCoupons() {
                   <th>Code</th>
                   <th>Label</th>
                   <th>Discount</th>
+                  <th>Rules</th>
                   <th>Used</th>
                   <th>Expires</th>
                   <th>Status</th>
@@ -265,7 +316,7 @@ export default function AdminCoupons() {
                 {loading ? (
                   Array.from({ length: 5 }).map((_, r) => (
                     <tr key={r}>
-                      {Array.from({ length: 7 }).map((_, c) => (
+                      {Array.from({ length: 8 }).map((_, c) => (
                         <td key={c} style={{ padding: "14px 10px" }}>
                           <div
                             className="adm-skel-row"
@@ -283,6 +334,13 @@ export default function AdminCoupons() {
                     </td>
                     <td>{c.label}</td>
                     <td>{displayDiscount(c)}</td>
+                    <td style={{ fontSize: 12, color: "var(--g500)" }}>
+                      {[
+                        c.frameOnlyDiscount ? "Frame only" : null,
+                        c.newUsersOnly ? "First order" : null,
+                        c.oneTimePerUser ? "One/user" : null,
+                      ].filter(Boolean).join(" · ") || "—"}
+                    </td>
                     <td>
                       <strong>{c.usedCount ?? 0}</strong>
                       {c.maxUses != null ? ` / ${c.maxUses}` : ""}
