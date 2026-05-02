@@ -54,8 +54,12 @@ export default function AdminReports({ orders = [], products = [] }) {
       products.map((p) => {
         const qty = Number(p?.stockQuantity ?? p?.stock ?? p?.quantity ?? 0);
         const rate = Number(p?.price ?? 0);
+        const fallbackCode = `EL-${String(p?._id || "").slice(-6)}`;
+        const code =
+          (p?.modelNumber && String(p.modelNumber).trim()) || p?.sku || fallbackCode;
         return {
-          sku: p?.sku || String(p?._id || "").slice(-8).toUpperCase(),
+          id: String(p?._id || code),
+          code,
           name: p?.name || "Product",
           category: p?.category || "General",
           qty,
@@ -80,7 +84,11 @@ export default function AdminReports({ orders = [], products = [] }) {
       push({ type: "success", title: "Exported", message: "Purchase report CSV downloaded." });
     }
     if (tab === "stock") {
-      downloadCSV(["SKU", "Name", "Category", "Qty", "Value"], stockReportRows.map((r) => [r.sku, r.name, r.category, r.qty, r.value]), `stock-report-${d}.csv`);
+      downloadCSV(
+        ["Model number", "Name", "Category", "Qty", "Value"],
+        stockReportRows.map((r) => [r.code, r.name, r.category, r.qty, r.value]),
+        `stock-report-${d}.csv`
+      );
       push({ type: "success", title: "Exported", message: "Stock report CSV downloaded." });
     }
     if (tab === "financial") {
@@ -245,7 +253,7 @@ export default function AdminReports({ orders = [], products = [] }) {
               <table className="adm-table">
                 <thead>
                   <tr>
-                    <th>SKU</th>
+                    <th>Model number</th>
                     <th>Product</th>
                     <th>Category</th>
                     <th style={{ textAlign: "right" }}>Quantity</th>
@@ -261,8 +269,8 @@ export default function AdminReports({ orders = [], products = [] }) {
                     </tr>
                   ) : (
                     stockReportRows.map((r) => (
-                      <tr key={r.sku}>
-                        <td style={{ color: "#6B7280" }}>{r.sku}</td>
+                      <tr key={r.id}>
+                        <td style={{ color: "#6B7280" }}>{r.code}</td>
                         <td><strong>{r.name}</strong></td>
                         <td><span className="badge badge-em">{r.category}</span></td>
                         <td style={{ textAlign: "right" }}>{r.qty}</td>

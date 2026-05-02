@@ -912,7 +912,7 @@ export default function AdminProducts() {
               <table className="adm-table">
                 <thead>
                   <tr>
-                    <th>SKU</th>
+                    <th>Model number</th>
                     <th>Product</th>
                     <th>Brand</th>
                     <th>Category</th>
@@ -951,7 +951,7 @@ export default function AdminProducts() {
               <table className="adm-table">
                 <thead>
                   <tr>
-                    <th>SKU</th>
+                    <th>Model number</th>
                     <th style={{ cursor: "pointer" }} onClick={() => toggleSort("name")}>Product{sortGlyph("name")}</th>
                     <th style={{ cursor: "pointer" }} onClick={() => toggleSort("brand")}>Brand{sortGlyph("brand")}</th>
                     <th style={{ cursor: "pointer" }} onClick={() => toggleSort("category")}>Category{sortGlyph("category")}</th>
@@ -966,7 +966,9 @@ export default function AdminProducts() {
                 <tbody>
                   {sorted.map((p, i) => (
                     <tr key={p._id || p.sku || i}>
-                      <td style={{ color: "var(--g500)", fontSize: 12 }}>{p.sku}</td>
+                      <td style={{ color: "var(--g500)", fontSize: 12 }}>
+                        {(p.modelNumber && String(p.modelNumber).trim()) || p.sku}
+                      </td>
                       <td>
                         <strong>{p.name}</strong>
                       </td>
@@ -1064,7 +1066,7 @@ export default function AdminProducts() {
             <div className="adm-modal-body" style={{ overflowY: "auto", maxHeight: "calc(90vh - 120px)", flex: 1, minHeight: 0 }}>
               <form onSubmit={handleEdit} style={{ display: "grid", gap: 14 }}>
               <div>
-                <label className="field-label">SKU</label>
+                <label className="field-label">Internal code</label>
                 <input className="input" value={editForm.sku} disabled style={{ background: "var(--g50)" }} />
               </div>
               <div>

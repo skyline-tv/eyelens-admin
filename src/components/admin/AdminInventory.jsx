@@ -4,9 +4,12 @@ import { useToast } from "../../context/ToastContext";
 
 function mapRow(p) {
   const stock = p.stock ?? 0;
+  const sku = `EL-${String(p._id).slice(-6)}`;
   return {
     _id: p._id,
-    sku: `EL-${String(p._id).slice(-6)}`,
+    sku,
+    modelNumber: p.modelNumber || "",
+    code: (p.modelNumber && String(p.modelNumber).trim()) || sku,
     name: p.name,
     category: p.category || "—",
     stock,
@@ -144,7 +147,7 @@ export default function AdminInventory({ startInLowFilter = false }) {
             <table className="adm-table">
               <thead>
                 <tr>
-                  <th>SKU</th>
+                  <th>Model number</th>
                   <th>Product</th>
                   <th>Category</th>
                   <th>Stock</th>
@@ -178,7 +181,7 @@ export default function AdminInventory({ startInLowFilter = false }) {
                           : undefined
                     }
                   >
-                    <td style={{ color: "var(--g500)", fontSize: 12 }}>{row.sku}</td>
+                    <td style={{ color: "var(--g500)", fontSize: 12 }}>{row.code}</td>
                     <td>
                       <strong>{row.name}</strong>
                       {row.stock === 0 && <span style={{ marginLeft: 8 }}>🔔</span>}
