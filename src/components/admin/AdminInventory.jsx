@@ -2,6 +2,18 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../../api/axiosInstance";
 import { useToast } from "../../context/ToastContext";
 
+function colorCodeSuffix(colorName) {
+  const parts = String(colorName || "")
+    .trim()
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean);
+  if (!parts.length) return "";
+  return parts
+    .map((p) => String(p[0] || "").toUpperCase())
+    .join("")
+    .slice(0, 4);
+}
+
 function mapRowsFromProduct(p) {
   const sku = `EL-${String(p._id).slice(-6)}`;
   const baseCode = (p.modelNumber && String(p.modelNumber).trim()) || sku;
@@ -27,14 +39,16 @@ function mapRowsFromProduct(p) {
 
   return colors.map((color, index) => {
     const colorStock = color.stock == null || Number.isNaN(Number(color.stock)) ? 0 : Math.max(0, Math.floor(Number(color.stock)));
+    const colorName = String(color.name || "").trim() || "Default";
+    const suffix = colorCodeSuffix(colorName);
     return {
       _id: p._id,
       rowId: `${p._id}:${String(color.name).toLowerCase().replace(/[^a-z0-9]+/g, "-")}:${index}`,
       colorIndex: index,
-      colorName: String(color.name || "").trim() || "Default",
+      colorName,
       sku,
       modelNumber: p.modelNumber || "",
-      code: `${baseCode}-${index + 1}`,
+      code: suffix ? `${baseCode}-${suffix}` : `${baseCode}-${index + 1}`,
       name: p.name,
       category: p.category || "—",
       stock: colorStock,

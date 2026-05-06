@@ -1,16 +1,32 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api/axiosInstance";
 import { useToast } from "../../context/ToastContext";
 import ConfirmModal from "../ConfirmModal.jsx";
+import AdminModal from "../AdminModal.jsx";
 import { useFocusTrap } from "../../hooks/useFocusTrap.js";
 
 const categories = ["Premium", "Sunglasses", "Computer", "Gold", "Eyeglasses", "General"];
+
+function colorCodeSuffix(colorName) {
+  const parts = String(colorName || "")
+    .trim()
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean);
+  if (!parts.length) return "";
+  return parts
+    .map((p) => String(p[0] || "").toUpperCase())
+    .join("")
+    .slice(0, 4);
+}
 
 function mapRow(p) {
   const priceNum = Number(p.price) || 0;
   const origRaw = p.origPrice != null ? Number(p.origPrice) : NaN;
   const origPrice = Number.isFinite(origRaw) && origRaw > priceNum ? origRaw : null;
   const listingId = p.listingId || p._id;
+  const colorName = String(p.variantColor?.name || "").trim();
+  const baseCode = (p.modelNumber && String(p.modelNumber).trim()) || `EL-${String(p._id).slice(-6)}`;
+  const modelCode = colorName && colorCodeSuffix(colorName) ? `${baseCode}-${colorCodeSuffix(colorName)}` : baseCode;
   return {
     listingId,
     _id: p._id,
@@ -26,8 +42,9 @@ function mapRow(p) {
     reviewCount: p.reviewCount ?? 0,
     images: Array.isArray(p.images) ? p.images : [],
     colors: Array.isArray(p.colors) ? p.colors : [],
-    colorName: String(p.variantColor?.name || "").trim(),
+    colorName,
     colorHex: String(p.variantColor?.hex || "").trim(),
+    modelCode,
     description: p.description || "",
     productHighlights: p.productHighlights || "",
     modelNumber: p.modelNumber || "",
@@ -158,6 +175,25 @@ function compare(a, b, dir) {
   return 0;
 }
 
+function parseClientReviewLines(text) {
+  const lines = String(text || "")
+    .split(/\r?\n/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  return lines
+    .map((line) => {
+      const delimiter = line.includes("|") ? "|" : ",";
+      const parts = line.split(delimiter).map((p) => p.trim());
+      if (parts.length < 3) return null;
+      const [userName, ratingRaw, ...commentParts] = parts;
+      const rating = Number(ratingRaw);
+      const comment = commentParts.join(` ${delimiter} `).trim();
+      if (!userName || !Number.isInteger(rating) || rating < 1 || rating > 5 || !comment) return null;
+      return { userName, rating, comment };
+    })
+    .filter(Boolean);
+}
+
 export default function AdminProducts() {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -205,8 +241,17 @@ export default function AdminProducts() {
   const editModalRef = useRef(null);
 
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [importReviewsProduct, setImportReviewsProduct] = useState(null);
+  const [importReviewsText, setImportReviewsText] = useState("");
+  const [importReviewsSubmitting, setImportReviewsSubmitting] = useState(false);
   const { push } = useToast();
   const [sort, setSort] = useState({ key: "name", dir: "asc" });
+  const parsedImportReviews = useMemo(() => parseClientReviewLines(importReviewsText), [importReviewsText]);
+  const validImportCount = parsedImportReviews.length;
+  const totalImportLines = String(importReviewsText || "")
+    .split(/\r?\n/)
+    .map((x) => x.trim())
+    .filter(Boolean).length;
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -515,6 +560,34 @@ export default function AdminProducts() {
 
   const handleDelete = async (p) => {
     setConfirmDelete(p);
+  };
+
+  const handleImportClientReviews = async () => {
+    if (!importReviewsProduct) return;
+    if (!validImportCount) {
+      push({ type: "error", title: "Invalid format", message: "Use: Name | Rating | Comment" });
+      return;
+    }
+    try {
+      setImportReviewsSubmitting(true);
+      await api.post(`/products/${importReviewsProduct._id}/reviews/import`, { reviews: parsedImportReviews });
+      push({
+        type: "success",
+        title: "Reviews added",
+        message: `${parsedImportReviews.length} review(s) added to ${importReviewsProduct.name}.`,
+      });
+      setImportReviewsProduct(null);
+      setImportReviewsText("");
+      await refresh();
+    } catch (e) {
+      push({
+        type: "error",
+        title: "Import failed",
+        message: e.response?.data?.message || "Could not import reviews.",
+      });
+    } finally {
+      setImportReviewsSubmitting(false);
+    }
   };
 
   return (
@@ -972,9 +1045,7 @@ export default function AdminProducts() {
                 <tbody>
                   {sorted.map((p, i) => (
                     <tr key={p.listingId || p._id || p.sku || i}>
-                      <td style={{ color: "var(--g500)", fontSize: 12 }}>
-                        {(p.modelNumber && String(p.modelNumber).trim()) || p.sku}
-                      </td>
+                      <td style={{ color: "var(--g500)", fontSize: 12 }}>{p.modelCode}</td>
                       <td>
                         <strong>{p.name}</strong>
                       </td>
@@ -1041,6 +1112,17 @@ export default function AdminProducts() {
                           onClick={() => openEdit(p)}
                         >
                           Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          style={{ padding: "6px 12px", fontSize: 12 }}
+                          onClick={() => {
+                            setImportReviewsProduct(p);
+                            setImportReviewsText("");
+                          }}
+                        >
+                          Add Reviews
                         </button>
                         <button
                           type="button"
@@ -1469,6 +1551,59 @@ export default function AdminProducts() {
           This action cannot be undone.
         </div>
       </ConfirmModal>
+      <AdminModal
+        isOpen={Boolean(importReviewsProduct)}
+        onClose={() => {
+          if (importReviewsSubmitting) return;
+          setImportReviewsProduct(null);
+          setImportReviewsText("");
+        }}
+        title={`Add Reviews - ${importReviewsProduct?.name || ""}`}
+        ariaLabel="Import client reviews"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={importReviewsSubmitting}
+              onClick={() => {
+                setImportReviewsProduct(null);
+                setImportReviewsText("");
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={importReviewsSubmitting || !validImportCount}
+              onClick={handleImportClientReviews}
+            >
+              {importReviewsSubmitting ? "Importing..." : "Import Reviews"}
+            </button>
+          </>
+        }
+      >
+        <div style={{ display: "grid", gap: 10 }}>
+          <div style={{ fontSize: 12, color: "var(--g600)", lineHeight: 1.5 }}>
+            Paste one review per line using either format:
+            <br />
+            <strong>Name | Rating | Comment</strong> or <strong>Name, Rating, Comment</strong>
+          </div>
+          <textarea
+            className="input"
+            rows={10}
+            placeholder={"Amit S.|5|Very comfortable and premium finish.\nPriya N.,4,Good fit and clean lens quality."}
+            value={importReviewsText}
+            onChange={(e) => setImportReviewsText(e.target.value)}
+            style={{ width: "100%", resize: "vertical", minHeight: 180 }}
+          />
+          <div style={{ fontSize: 12, color: "var(--g500)" }}>
+            Parsed: <strong style={{ color: "var(--black)" }}>{validImportCount}</strong> valid of{" "}
+            <strong style={{ color: "var(--black)" }}>{totalImportLines}</strong> line(s).
+          </div>
+        </div>
+      </AdminModal>
       <datalist id="admin-product-categories">
         {categories.map((c) => (
           <option key={c} value={c} />
