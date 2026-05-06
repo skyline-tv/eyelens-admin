@@ -2,20 +2,46 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../../api/axiosInstance";
 import { useToast } from "../../context/ToastContext";
 
-function mapRow(p) {
-  const stock = p.stock ?? 0;
+function mapRowsFromProduct(p) {
   const sku = `EL-${String(p._id).slice(-6)}`;
-  return {
-    _id: p._id,
-    sku,
-    modelNumber: p.modelNumber || "",
-    code: (p.modelNumber && String(p.modelNumber).trim()) || sku,
-    name: p.name,
-    category: p.category || "—",
-    stock,
-    threshold: 5,
-    status: stock === 0 ? "out" : stock < 5 ? "low" : "ok",
-  };
+  const baseCode = (p.modelNumber && String(p.modelNumber).trim()) || sku;
+  const colors = Array.isArray(p.colors) ? p.colors.filter((c) => c && String(c.name || "").trim()) : [];
+  if (!colors.length) {
+    return [
+      {
+        _id: p._id,
+        rowId: `${p._id}:base`,
+        colorIndex: null,
+        colorName: "Default",
+        sku,
+        modelNumber: p.modelNumber || "",
+        code: baseCode,
+        name: p.name,
+        category: p.category || "—",
+        stock: p.stock ?? 0,
+        threshold: 5,
+        status: (p.stock ?? 0) === 0 ? "out" : (p.stock ?? 0) < 5 ? "low" : "ok",
+      },
+    ];
+  }
+
+  return colors.map((color, index) => {
+    const colorStock = color.stock == null || Number.isNaN(Number(color.stock)) ? 0 : Math.max(0, Math.floor(Number(color.stock)));
+    return {
+      _id: p._id,
+      rowId: `${p._id}:${String(color.name).toLowerCase().replace(/[^a-z0-9]+/g, "-")}:${index}`,
+      colorIndex: index,
+      colorName: String(color.name || "").trim() || "Default",
+      sku,
+      modelNumber: p.modelNumber || "",
+      code: `${baseCode}-${index + 1}`,
+      name: p.name,
+      category: p.category || "—",
+      stock: colorStock,
+      threshold: 5,
+      status: colorStock === 0 ? "out" : colorStock < 5 ? "low" : "ok",
+    };
+  });
 }
 
 /** Live inventory from API; rows with stock &lt; 5 highlighted; quick stock update via PUT /products/:id */
@@ -35,7 +61,12 @@ export default function AdminInventory({ startInLowFilter = false }) {
     setLoading(true);
     try {
       const { data } = await api.get("/products", { params: { limit: 100 } });
-      setItems((data.data || []).map(mapRow));
+      const byId = new Map();
+      for (const p of data.data || []) {
+        if (!p?._id) continue;
+        if (!byId.has(String(p._id))) byId.set(String(p._id), p);
+      }
+      setItems(Array.from(byId.values()).flatMap(mapRowsFromProduct));
     } catch {
       setItems([]);
     } finally {
@@ -64,14 +95,27 @@ export default function AdminInventory({ startInLowFilter = false }) {
     try {
       const { data: cur } = await api.get(`/products/${row._id}`);
       const doc = cur.data;
+      const nextColors = Array.isArray(doc.colors) ? [...doc.colors] : [];
+      let nextStock = num;
+      if (row.colorIndex != null && nextColors[row.colorIndex]) {
+        nextColors[row.colorIndex] = { ...nextColors[row.colorIndex], stock: num };
+        const hasColorStocks = nextColors.some((c) => Number.isFinite(Number(c?.stock)));
+        nextStock = hasColorStocks
+          ? nextColors.reduce(
+              (sum, c) => sum + (Number.isFinite(Number(c?.stock)) ? Math.max(0, Math.floor(Number(c.stock))) : 0),
+              0
+            )
+          : Number(doc.stock) || 0;
+      }
       await api.put(`/products/${row._id}`, {
         name: doc.name,
         brand: doc.brand,
         price: doc.price,
         category: doc.category,
-        stock: num,
+        colors: nextColors,
+        stock: nextStock,
       });
-      push({ type: "success", title: "Stock updated", message: row.name });
+      push({ type: "success", title: "Stock updated", message: `${row.name} (${row.colorName})` });
       setUpdatingId(null);
       setNewStock("");
       await refresh();
@@ -150,6 +194,7 @@ export default function AdminInventory({ startInLowFilter = false }) {
                   <th>Model number</th>
                   <th>Product</th>
                   <th>Category</th>
+                  <th>Color</th>
                   <th>Stock</th>
                   <th>Status</th>
                   <th>Actions</th>
@@ -159,7 +204,7 @@ export default function AdminInventory({ startInLowFilter = false }) {
                 {loading ? (
                   Array.from({ length: 8 }).map((_, r) => (
                     <tr key={r}>
-                      {Array.from({ length: 6 }).map((_, c) => (
+                      {Array.from({ length: 7 }).map((_, c) => (
                         <td key={c} style={{ padding: "14px 10px" }}>
                           <div
                             className="adm-skel-row"
@@ -172,7 +217,7 @@ export default function AdminInventory({ startInLowFilter = false }) {
                 ) : (
                   filtered.map((row) => (
                   <tr
-                    key={row._id}
+                    key={row.rowId}
                     style={
                       row.stock === 0
                         ? { background: "rgba(220, 38, 38, 0.08)" }
@@ -191,7 +236,10 @@ export default function AdminInventory({ startInLowFilter = false }) {
                       <span className="badge badge-em">{row.category}</span>
                     </td>
                     <td>
-                      {updatingId === row._id ? (
+                      <span className="badge badge-gold">{row.colorName}</span>
+                    </td>
+                    <td>
+                      {updatingId === row.rowId ? (
                         <input
                           className="input"
                           type="number"
@@ -215,7 +263,7 @@ export default function AdminInventory({ startInLowFilter = false }) {
                       </span>
                     </td>
                     <td>
-                      {updatingId === row._id ? (
+                      {updatingId === row.rowId ? (
                         <>
                           <button
                             type="button"
@@ -243,7 +291,7 @@ export default function AdminInventory({ startInLowFilter = false }) {
                           className="btn btn-primary btn-sm"
                           style={{ padding: "6px 12px", fontSize: 12 }}
                           onClick={() => {
-                            setUpdatingId(row._id);
+                            setUpdatingId(row.rowId);
                             setNewStock(String(row.stock));
                           }}
                         >

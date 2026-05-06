@@ -10,7 +10,9 @@ function mapRow(p) {
   const priceNum = Number(p.price) || 0;
   const origRaw = p.origPrice != null ? Number(p.origPrice) : NaN;
   const origPrice = Number.isFinite(origRaw) && origRaw > priceNum ? origRaw : null;
+  const listingId = p.listingId || p._id;
   return {
+    listingId,
     _id: p._id,
     sku: `EL-${String(p._id).slice(-6)}`,
     brand: p.brand,
@@ -24,6 +26,8 @@ function mapRow(p) {
     reviewCount: p.reviewCount ?? 0,
     images: Array.isArray(p.images) ? p.images : [],
     colors: Array.isArray(p.colors) ? p.colors : [],
+    colorName: String(p.variantColor?.name || "").trim(),
+    colorHex: String(p.variantColor?.hex || "").trim(),
     description: p.description || "",
     productHighlights: p.productHighlights || "",
     modelNumber: p.modelNumber || "",
@@ -241,7 +245,8 @@ export default function AdminProducts() {
     const matchSearch =
       !search ||
       p.name.toLowerCase().includes(search.toLowerCase()) ||
-      (p.brand && p.brand.toLowerCase().includes(search.toLowerCase()));
+      (p.brand && p.brand.toLowerCase().includes(search.toLowerCase())) ||
+      (p.colorName && p.colorName.toLowerCase().includes(search.toLowerCase()));
     return matchCat && matchSearch;
   });
 
@@ -953,6 +958,7 @@ export default function AdminProducts() {
                   <tr>
                     <th>Model number</th>
                     <th style={{ cursor: "pointer" }} onClick={() => toggleSort("name")}>Product{sortGlyph("name")}</th>
+                    <th>Color</th>
                     <th style={{ cursor: "pointer" }} onClick={() => toggleSort("brand")}>Brand{sortGlyph("brand")}</th>
                     <th style={{ cursor: "pointer" }} onClick={() => toggleSort("category")}>Category{sortGlyph("category")}</th>
                     <th style={{ cursor: "pointer" }} onClick={() => toggleSort("gender")}>Gender{sortGlyph("gender")}</th>
@@ -965,12 +971,25 @@ export default function AdminProducts() {
                 </thead>
                 <tbody>
                   {sorted.map((p, i) => (
-                    <tr key={p._id || p.sku || i}>
+                    <tr key={p.listingId || p._id || p.sku || i}>
                       <td style={{ color: "var(--g500)", fontSize: 12 }}>
                         {(p.modelNumber && String(p.modelNumber).trim()) || p.sku}
                       </td>
                       <td>
                         <strong>{p.name}</strong>
+                      </td>
+                      <td>
+                        {p.colorName ? (
+                          <span className="adm-pill">
+                            <span
+                              className="adm-pill-dot"
+                              style={p.colorHex ? { background: p.colorHex, border: "1px solid var(--g200)" } : undefined}
+                            />
+                            {p.colorName}
+                          </span>
+                        ) : (
+                          <span style={{ color: "var(--g400)" }}>—</span>
+                        )}
                       </td>
                       <td>{p.brand}</td>
                       <td>
