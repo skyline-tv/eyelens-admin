@@ -182,12 +182,13 @@ function parseClientReviewLines(text) {
     .filter(Boolean);
   return lines
     .map((line) => {
-      const delimiter = line.includes("|") ? "|" : ",";
-      const parts = line.split(delimiter).map((p) => p.trim());
-      if (parts.length < 3) return null;
-      const [userName, ratingRaw, ...commentParts] = parts;
+      // Supports: Name|5|Comment OR Name,5,Comment OR Name<TAB>5<TAB>Comment OR Name;5;Comment
+      const match = String(line).match(/^\s*(.+?)\s*[|,\t;]\s*([1-5])\s*[|,\t;]\s*(.+)\s*$/);
+      if (!match) return null;
+      const [, userNameRaw, ratingRaw, commentRaw] = match;
+      const userName = String(userNameRaw || "").trim();
       const rating = Number(ratingRaw);
-      const comment = commentParts.join(` ${delimiter} `).trim();
+      const comment = String(commentRaw || "").trim();
       if (!userName || !Number.isInteger(rating) || rating < 1 || rating > 5 || !comment) return null;
       return { userName, rating, comment };
     })
@@ -1586,9 +1587,10 @@ export default function AdminProducts() {
       >
         <div style={{ display: "grid", gap: 10 }}>
           <div style={{ fontSize: 12, color: "var(--g600)", lineHeight: 1.5 }}>
-            Paste one review per line using either format:
+            Paste one review per line using any of these formats:
             <br />
-            <strong>Name | Rating | Comment</strong> or <strong>Name, Rating, Comment</strong>
+            <strong>Name | Rating | Comment</strong>, <strong>Name, Rating, Comment</strong>,
+            <strong>Name[TAB]Rating[TAB]Comment</strong>, or <strong>Name;Rating;Comment</strong>
           </div>
           <textarea
             className="input"
