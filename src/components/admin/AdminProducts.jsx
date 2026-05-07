@@ -578,6 +578,7 @@ export default function AdminProducts() {
         importReviewsProduct.variantOf,
       ]
         .map((id) => String(id || "").trim())
+        .filter((id) => /^[a-f\d]{24}$/i.test(id))
         .filter(Boolean)
         .filter((id, idx, arr) => arr.indexOf(id) === idx);
       if (!candidateProductIds.length) {
