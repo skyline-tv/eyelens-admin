@@ -572,15 +572,34 @@ export default function AdminProducts() {
     }
     try {
       setImportReviewsSubmitting(true);
-      const productId = String(importReviewsProduct.variantOf || importReviewsProduct._id || "").trim();
-      if (!productId) {
+      const candidateProductIds = [
+        importReviewsProduct.listingId,
+        importReviewsProduct._id,
+        importReviewsProduct.variantOf,
+      ]
+        .map((id) => String(id || "").trim())
+        .filter(Boolean)
+        .filter((id, idx, arr) => arr.indexOf(id) === idx);
+      if (!candidateProductIds.length) {
         throw new Error("Missing product id");
       }
       const CHUNK_SIZE = 500;
       let importedCount = 0;
       for (let i = 0; i < parsedImportReviews.length; i += CHUNK_SIZE) {
         const chunk = parsedImportReviews.slice(i, i + CHUNK_SIZE);
-        const { data } = await api.post(`/products/${productId}/reviews/import`, { reviews: chunk });
+        let lastError = null;
+        let data = null;
+        for (const productId of candidateProductIds) {
+          try {
+            const res = await api.post(`/products/${productId}/reviews/import`, { reviews: chunk });
+            data = res.data;
+            lastError = null;
+            break;
+          } catch (err) {
+            lastError = err;
+          }
+        }
+        if (lastError) throw lastError;
         importedCount += Number(data?.data?.imported) || chunk.length;
       }
       push({
