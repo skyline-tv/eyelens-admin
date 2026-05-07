@@ -30,6 +30,7 @@ function mapRow(p) {
   return {
     listingId,
     _id: p._id,
+    variantOf: p.variantOf || p._id,
     sku: `EL-${String(p._id).slice(-6)}`,
     brand: p.brand,
     name: p.name,
@@ -571,11 +572,21 @@ export default function AdminProducts() {
     }
     try {
       setImportReviewsSubmitting(true);
-      await api.post(`/products/${importReviewsProduct._id}/reviews/import`, { reviews: parsedImportReviews });
+      const productId = String(importReviewsProduct.variantOf || importReviewsProduct._id || "").trim();
+      if (!productId) {
+        throw new Error("Missing product id");
+      }
+      const CHUNK_SIZE = 500;
+      let importedCount = 0;
+      for (let i = 0; i < parsedImportReviews.length; i += CHUNK_SIZE) {
+        const chunk = parsedImportReviews.slice(i, i + CHUNK_SIZE);
+        const { data } = await api.post(`/products/${productId}/reviews/import`, { reviews: chunk });
+        importedCount += Number(data?.data?.imported) || chunk.length;
+      }
       push({
         type: "success",
         title: "Reviews added",
-        message: `${parsedImportReviews.length} review(s) added to ${importReviewsProduct.name}.`,
+        message: `${importedCount} review(s) added to ${importReviewsProduct.name}.`,
       });
       setImportReviewsProduct(null);
       setImportReviewsText("");
@@ -584,7 +595,7 @@ export default function AdminProducts() {
       push({
         type: "error",
         title: "Import failed",
-        message: e.response?.data?.message || "Could not import reviews.",
+        message: e.response?.data?.message || e.message || "Could not import reviews.",
       });
     } finally {
       setImportReviewsSubmitting(false);
