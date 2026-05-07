@@ -183,8 +183,17 @@ function parseClientReviewLines(text) {
     .filter(Boolean);
   return lines
     .map((line) => {
-      // Supports: Name|5|Comment OR Name,5,Comment OR Name<TAB>5<TAB>Comment OR Name;5;Comment
-      const match = String(line).match(/^\s*(.+?)\s*[|,\t;]\s*([1-5])\s*[|,\t;]\s*(.+)\s*$/);
+      const normalized = String(line)
+        .replace(/[“”]/g, '"')
+        .replace(/[‘’]/g, "'")
+        .replace(/[–—]/g, "-");
+      // Supports:
+      // Name|5|Comment
+      // Name,5,Comment
+      // Name<TAB>5<TAB>Comment
+      // Name;5;Comment
+      // Name - 5 - Comment
+      const match = normalized.match(/^\s*(.+?)\s*(?:[|,\t;]|-\s+)\s*([1-5])\s*(?:[|,\t;]|-\s+)\s*(.+)\s*$/);
       if (!match) return null;
       const [, userNameRaw, ratingRaw, commentRaw] = match;
       const userName = String(userNameRaw || "").trim();
@@ -254,6 +263,7 @@ export default function AdminProducts() {
     .split(/\r?\n/)
     .map((x) => x.trim())
     .filter(Boolean).length;
+  const invalidImportCount = Math.max(0, totalImportLines - validImportCount);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -572,7 +582,11 @@ export default function AdminProducts() {
     }
     try {
       setImportReviewsSubmitting(true);
+      const listingBaseId = String(importReviewsProduct.listingId || "")
+        .split(":")[0]
+        .trim();
       const candidateProductIds = [
+        listingBaseId,
         importReviewsProduct.listingId,
         importReviewsProduct._id,
         importReviewsProduct.variantOf,
@@ -583,6 +597,13 @@ export default function AdminProducts() {
         .filter((id, idx, arr) => arr.indexOf(id) === idx);
       if (!candidateProductIds.length) {
         throw new Error("Missing product id");
+      }
+      if (invalidImportCount > 0) {
+        push({
+          type: "info",
+          title: "Some lines skipped",
+          message: `${invalidImportCount} line(s) were invalid and were not imported.`,
+        });
       }
       const CHUNK_SIZE = 500;
       let importedCount = 0;
@@ -606,16 +627,18 @@ export default function AdminProducts() {
       push({
         type: "success",
         title: "Reviews added",
-        message: `${importedCount} review(s) added to ${importReviewsProduct.name}.`,
+        message: `${importedCount} review(s) added to ${importReviewsProduct.name}${invalidImportCount ? ` (${invalidImportCount} skipped)` : ""}.`,
       });
       setImportReviewsProduct(null);
       setImportReviewsText("");
       await refresh();
     } catch (e) {
+      const status = e?.response?.status;
+      const baseMessage = e?.response?.data?.message || e?.message || "Could not import reviews.";
       push({
         type: "error",
         title: "Import failed",
-        message: e.response?.data?.message || e.message || "Could not import reviews.",
+        message: status ? `(${status}) ${baseMessage}` : baseMessage,
       });
     } finally {
       setImportReviewsSubmitting(false);
@@ -1608,7 +1631,7 @@ export default function AdminProducts() {
             <button
               type="button"
               className="btn btn-primary"
-              disabled={importReviewsSubmitting || !validImportCount}
+              disabled={importReviewsSubmitting}
               onClick={handleImportClientReviews}
             >
               {importReviewsSubmitting ? "Importing..." : "Import Reviews"}
@@ -1621,7 +1644,8 @@ export default function AdminProducts() {
             Paste one review per line using any of these formats:
             <br />
             <strong>Name | Rating | Comment</strong>, <strong>Name, Rating, Comment</strong>,
-            <strong>Name[TAB]Rating[TAB]Comment</strong>, or <strong>Name;Rating;Comment</strong>
+            <strong>Name[TAB]Rating[TAB]Comment</strong>, <strong>Name;Rating;Comment</strong>, or{" "}
+            <strong>Name - Rating - Comment</strong>
           </div>
           <textarea
             className="input"
@@ -1635,6 +1659,16 @@ export default function AdminProducts() {
             Parsed: <strong style={{ color: "var(--black)" }}>{validImportCount}</strong> valid of{" "}
             <strong style={{ color: "var(--black)" }}>{totalImportLines}</strong> line(s).
           </div>
+          {totalImportLines > 0 && validImportCount === 0 ? (
+            <div style={{ fontSize: 12, color: "var(--red)" }}>
+              Could not parse any line. Example: <strong>Amit S.|5|Very comfortable and premium finish.</strong>
+            </div>
+          ) : null}
+          {invalidImportCount > 0 && validImportCount > 0 ? (
+            <div style={{ fontSize: 12, color: "var(--g600)" }}>
+              {invalidImportCount} line(s) do not match format and will be skipped.
+            </div>
+          ) : null}
         </div>
       </AdminModal>
       <datalist id="admin-product-categories">
