@@ -9,6 +9,11 @@ const FOCUSABLE =
  */
 export function useFocusTrap(containerRef, isOpen, { onEscape } = {}) {
   const prevActiveRef = useRef(null);
+  const onEscapeRef = useRef(onEscape);
+
+  useEffect(() => {
+    onEscapeRef.current = onEscape;
+  }, [onEscape]);
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -32,7 +37,7 @@ export function useFocusTrap(containerRef, isOpen, { onEscape } = {}) {
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
-        onEscape?.();
+        onEscapeRef.current?.();
         return;
       }
       if (e.key !== "Tab" || !container) return;
@@ -72,5 +77,5 @@ export function useFocusTrap(containerRef, isOpen, { onEscape } = {}) {
         }
       }
     };
-  }, [isOpen, containerRef, onEscape]);
+  }, [isOpen, containerRef]);
 }
