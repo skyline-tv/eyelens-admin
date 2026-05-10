@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { jsPDF } from "jspdf";
 import { api } from "../../api/axiosInstance";
 import { useToast } from "../../context/ToastContext";
+import { downloadOrderInvoicePdf } from "../../utils/downloadOrderInvoicePdf.js";
 import AdminModal from "../AdminModal.jsx";
 
 const STATUS_OPTS = ["pending", "confirmed", "shipped", "delivered", "cancelled"];
@@ -89,139 +89,6 @@ function formatPrescriptionText(prescription) {
   if (prescription.add) parts.push(`Add ${prescription.add}`);
   if (prescription.pd) parts.push(`PD ${prescription.pd}`);
   return parts.join(" | ");
-}
-
-function sanitizeFilenameSegment(value) {
-  return String(value || "")
-    .trim()
-    .replace(/[\\/:*?"<>|]/g, "")
-    .replace(/\s+/g, " ")
-    .slice(0, 80);
-}
-
-function downloadLensReceiptPdf(receipt) {
-  const doc = new jsPDF({ unit: "pt", format: "a4" });
-  const left = 48;
-  let y = 64;
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.text("EYELENS - LENS RECEIPT", left, y);
-  y += 28;
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(11);
-  const lines = [
-    `Receipt No: ${receipt.id || "—"}`,
-    `Order No: ${receipt.orderId || "—"}`,
-    `Invoice No: ${receipt.invoiceNo || "—"}`,
-    `Client Name: ${receipt.clientName || "—"}`,
-    `Lens Type: ${receipt.lensType || "—"}`,
-  ].filter(Boolean);
-
-  for (const line of lines) {
-    const wrapped = doc.splitTextToSize(line, 500);
-    doc.text(wrapped, left, y);
-    y += wrapped.length * 16;
-  }
-
-  y += 8;
-  const rx = receipt.prescription && typeof receipt.prescription === "object" ? receipt.prescription : null;
-  const patient = rx?.patientName || receipt.clientName || "—";
-  const fallback = String(receipt.lensPower || "").trim();
-  doc.setFont("helvetica", "bold");
-  doc.text("Prescription:", left, y);
-  y += 16;
-  doc.setFont("helvetica", "normal");
-  doc.text(`Patient: ${patient}`, left, y);
-  y += 16;
-
-  if (rx) {
-    const tableLeft = left;
-    const tableTop = y + 4;
-    const colW = [90, 110, 110, 110];
-    const rowH = 24;
-    const headers = ["", "Sphere", "Cylinder", "Axis"];
-    const rows = [
-      ["OD (R)", rx.odSphere || "—", rx.odCylinder || "—", rx.odAxis || "—"],
-      ["OS (L)", rx.osSphere || "—", rx.osCylinder || "—", rx.osAxis || "—"],
-    ];
-    const totalW = colW.reduce((a, b) => a + b, 0);
-    const totalH = rowH * (1 + rows.length);
-
-    doc.rect(tableLeft, tableTop, totalW, totalH);
-    let x = tableLeft;
-    for (let i = 0; i < colW.length - 1; i += 1) {
-      x += colW[i];
-      doc.line(x, tableTop, x, tableTop + totalH);
-    }
-    doc.line(tableLeft, tableTop + rowH, tableLeft + totalW, tableTop + rowH);
-    doc.line(tableLeft, tableTop + rowH * 2, tableLeft + totalW, tableTop + rowH * 2);
-
-    doc.setFont("helvetica", "bold");
-    let hx = tableLeft;
-    headers.forEach((h, idx) => {
-      doc.text(h, hx + 8, tableTop + 16);
-      hx += colW[idx];
-    });
-
-    doc.setFont("helvetica", "normal");
-    rows.forEach((r, ri) => {
-      let cx = tableLeft;
-      r.forEach((cell, ci) => {
-        if (ci === 0) doc.setFont("helvetica", "bold");
-        else doc.setFont("helvetica", "normal");
-        doc.text(String(cell), cx + 8, tableTop + rowH * (ri + 1) + 16);
-        cx += colW[ci];
-      });
-    });
-    y = tableTop + totalH + 16;
-    doc.setFont("helvetica", "normal");
-    const extra = [];
-    if (rx.add) extra.push(`Add: ${rx.add}`);
-    if (rx.pd) extra.push(`PD: ${rx.pd}`);
-    if (extra.length) {
-      doc.text(extra.join("  |  "), left, y);
-      y += 16;
-    }
-  } else {
-    doc.text(fallback || "—", left, y);
-  }
-
-  const safeClient = sanitizeFilenameSegment(receipt.clientName) || "Client";
-  doc.save(`${safeClient} - lens receipt.pdf`);
-}
-
-function downloadCourierReceiptPdf(receipt) {
-  const doc = new jsPDF({ unit: "pt", format: "a4" });
-  const left = 48;
-  let y = 64;
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.text("EYELENS - COURIER RECEIPT", left, y);
-  y += 28;
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(11);
-  const lines = [
-    `Receipt No: ${receipt.id || "—"}`,
-    `Order No: ${receipt.orderId || "—"}`,
-    `Invoice No: ${receipt.invoiceNo || "—"}`,
-    `Client Name: ${receipt.deliveryName || "—"}`,
-    "Address:",
-  ];
-  for (const line of lines) {
-    doc.text(line, left, y);
-    y += 16;
-  }
-
-  const address = String(receipt.deliveryAddress || "—");
-  const wrappedAddress = doc.splitTextToSize(address, 500);
-  doc.text(wrappedAddress, left, y);
-
-  const safeClient = sanitizeFilenameSegment(receipt.deliveryName) || "Client";
-  doc.save(`${safeClient} - courier receipt.pdf`);
 }
 
 export default function AdminOrders({
@@ -344,57 +211,69 @@ export default function AdminOrders({
     }
   };
 
-  const createCourierReceipt = (order) => {
+  const createCourierReceipt = async (order) => {
     const orderRef = order.id;
-    const existing = courierReceipts.find((r) => String(r.orderId) === orderRef);
-    if (existing) {
-      downloadCourierReceiptPdf(existing);
-      push({ type: "success", title: "Courier receipt downloaded", message: `Downloaded for ${order.id}.` });
+    try {
+      await downloadOrderInvoicePdf(order._id);
+    } catch {
+      push({ type: "error", title: "Download failed", message: "Could not download invoice PDF from the server." });
       return;
     }
-    const created = {
-      id: `CR-${String(courierReceipts.length + 1).padStart(3, "0")}`,
-      orderId: orderRef,
-      invoiceNo: buildInvoiceNo(order._id),
-      deliveryName: order.customer || "—",
-      deliveryAddress: order.address || "—",
-      paid: order.paymentStatus === "paid",
-      amount: Number(String(order.amount).replace(/[^\d]/g, "")) || 0,
-      date: new Date().toISOString().slice(0, 10),
-      notes: "Created from Orders action.",
-    };
-    setCourierReceipts((prev) => [created, ...prev]);
-    downloadCourierReceiptPdf(created);
-    push({ type: "success", title: "Courier receipt created", message: `Created and downloaded for ${order.id}.` });
+    const existing = courierReceipts.find((r) => String(r.orderId) === orderRef);
+    if (!existing) {
+      const created = {
+        id: `CR-${String(courierReceipts.length + 1).padStart(3, "0")}`,
+        orderId: orderRef,
+        invoiceNo: buildInvoiceNo(order._id),
+        deliveryName: order.customer || "—",
+        deliveryAddress: order.address || "—",
+        paid: order.paymentStatus === "paid",
+        amount: Number(String(order.amount).replace(/[^\d]/g, "")) || 0,
+        date: new Date().toISOString().slice(0, 10),
+        notes: "Eyelens invoice PDF (template) downloaded from Orders.",
+      };
+      setCourierReceipts((prev) => [created, ...prev]);
+    }
+    push({
+      type: "success",
+      title: existing ? "PDF downloaded" : "Receipt logged",
+      message: `Official invoice & shipping PDF saved for ${order.id}.`,
+    });
   };
 
-  const createLensReceipt = (order) => {
+  const createLensReceipt = async (order) => {
     const orderRef = order.id;
     const firstItem = order.items?.[0] || {};
     const firstRxItem = (order.items || []).find((it) => it?.prescription);
     const prescription = firstRxItem?.prescription || null;
-    const existing = lensReceipts.find((r) => String(r.orderId) === orderRef);
-    if (existing) {
-      downloadLensReceiptPdf(existing);
-      push({ type: "success", title: "Lens receipt downloaded", message: `Downloaded for ${order.id}.` });
+    try {
+      await downloadOrderInvoicePdf(order._id);
+    } catch {
+      push({ type: "error", title: "Download failed", message: "Could not download invoice PDF from the server." });
       return;
     }
-    const created = {
-      id: `LR-${String(lensReceipts.length + 1).padStart(3, "0")}`,
-      orderId: orderRef,
-      clientName: order.customer || "—",
-      invoiceNo: buildInvoiceNo(order._id),
-      lensType: firstItem?.lens?.name || "Prescription lens",
-      frameName: firstItem?.name || "—",
-      lensPower: formatPrescriptionText(prescription),
-      prescription,
-      amount: Number(String(order.amount).replace(/[^\d]/g, "")) || 0,
-      date: new Date().toISOString().slice(0, 10),
-      notes: "Created from Orders action.",
-    };
-    setLensReceipts((prev) => [created, ...prev]);
-    downloadLensReceiptPdf(created);
-    push({ type: "success", title: "Lens receipt created", message: `Created and downloaded for ${order.id}.` });
+    const existing = lensReceipts.find((r) => String(r.orderId) === orderRef);
+    if (!existing) {
+      const created = {
+        id: `LR-${String(lensReceipts.length + 1).padStart(3, "0")}`,
+        orderId: orderRef,
+        clientName: order.customer || "—",
+        invoiceNo: buildInvoiceNo(order._id),
+        lensType: firstItem?.lens?.name || "Prescription lens",
+        frameName: firstItem?.name || "—",
+        lensPower: formatPrescriptionText(prescription),
+        prescription,
+        amount: Number(String(order.amount).replace(/[^\d]/g, "")) || 0,
+        date: new Date().toISOString().slice(0, 10),
+        notes: "Eyelens invoice PDF (template) downloaded from Orders.",
+      };
+      setLensReceipts((prev) => [created, ...prev]);
+    }
+    push({
+      type: "success",
+      title: existing ? "PDF downloaded" : "Receipt logged",
+      message: `Official invoice & lens/Rx PDF saved for ${order.id}.`,
+    });
   };
 
   return (
@@ -552,19 +431,19 @@ export default function AdminOrders({
                           type="button"
                           className="btn btn-ghost btn-sm"
                           style={{ padding: "6px 12px", fontSize: 12 }}
-                          onClick={() => createCourierReceipt(o)}
-                          title="Create courier receipt"
+                          onClick={() => void createCourierReceipt(o)}
+                          title="Download invoice PDF (includes ship-to). Logs courier receipt row if new."
                         >
-                          Courier receipt
+                          Courier PDF
                         </button>
                         <button
                           type="button"
                           className="btn btn-ghost btn-sm"
                           style={{ padding: "6px 12px", fontSize: 12 }}
-                          onClick={() => createLensReceipt(o)}
-                          title="Create lens receipt"
+                          onClick={() => void createLensReceipt(o)}
+                          title="Download invoice PDF (includes lens & Rx). Logs lens receipt row if new."
                         >
-                          Lens receipt
+                          Lens PDF
                         </button>
                       </td>
                     </tr>
@@ -582,9 +461,36 @@ export default function AdminOrders({
         title={viewOrder ? `Order ${viewOrder.id}` : "Order"}
         ariaLabel={viewOrder ? `Order ${viewOrder.id} details` : "Order details"}
         footer={
-          <button type="button" className="btn btn-ghost" onClick={() => setViewOrder(null)}>
-            Close
-          </button>
+          <>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                if (!viewOrder) return;
+                void (async () => {
+                  try {
+                    await downloadOrderInvoicePdf(viewOrder._id);
+                    push({
+                      type: "success",
+                      title: "PDF downloaded",
+                      message: `Invoice & lens receipt for ${viewOrder.id} saved.`,
+                    });
+                  } catch {
+                    push({
+                      type: "error",
+                      title: "Download failed",
+                      message: "Could not download invoice PDF from the server.",
+                    });
+                  }
+                })();
+              }}
+            >
+              Download invoice PDF
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => setViewOrder(null)}>
+              Close
+            </button>
+          </>
         }
       >
         <div style={{ display: "grid", gap: 12 }}>

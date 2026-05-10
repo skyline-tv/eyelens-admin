@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useBriefSkeleton } from "../../hooks/useBriefSkeleton";
 import { useToast } from "../../context/ToastContext";
+import { downloadOrderInvoicePdf } from "../../utils/downloadOrderInvoicePdf.js";
 
 const gstRates = [0, 5, 12, 18, 28];
 
@@ -72,6 +73,7 @@ export default function AdminInvoices({ orders = [] }) {
         const gst = Number(o.taxAmount ?? 0);
         return {
           id: `INV-${String(o._id || "").slice(-6).toUpperCase()}`,
+          _orderMongoId: o._id,
           type: "sales",
           party: o.user?.name || o.user?.email || "Customer",
           date: o.createdAt ? new Date(o.createdAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
@@ -302,6 +304,33 @@ export default function AdminInvoices({ orders = [] }) {
                     <td><strong>₹{Number(inv.total).toLocaleString("en-IN")}</strong></td>
                     <td><span className={`badge ${inv.status === "paid" ? "badge-delivered" : "badge-transit"}`}>{inv.status}</span></td>
                     <td>
+                      {inv._orderMongoId ? (
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          style={{ marginRight: 6 }}
+                          onClick={() => {
+                            void (async () => {
+                              try {
+                                await downloadOrderInvoicePdf(inv._orderMongoId);
+                                push({
+                                  type: "success",
+                                  title: "Invoice PDF",
+                                  message: `${inv.id} — Eyelens invoice & lens receipt downloaded.`,
+                                });
+                              } catch {
+                                push({
+                                  type: "error",
+                                  title: "Download failed",
+                                  message: "Could not download PDF from the server.",
+                                });
+                              }
+                            })();
+                          }}
+                        >
+                          PDF (Eyelens)
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         className="btn btn-ghost btn-sm"
@@ -322,7 +351,7 @@ export default function AdminInvoices({ orders = [] }) {
                           push({ type: "success", title: "Downloaded", message: `${inv.id} invoice downloaded.` });
                         }}
                       >
-                        Download
+                        HTML
                       </button>
                     </td>
                   </tr>
